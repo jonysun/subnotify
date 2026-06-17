@@ -1,0 +1,18 @@
+{
+  "name": "subscription-expense-manager",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @sem/api",
+    "dev:web": "npm run dev -w @sem/web",
+    "build": "npm run build -ws --if-present",
+    "test": "npm run test -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npm run db:migrate -w @sem/api",
+    "seed": "npm run seed -w @sem/api"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": { "drizzle-kit": "^0.24.0", "typescript": "^5.5.0" }
+}
