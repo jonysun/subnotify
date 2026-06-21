@@ -7,7 +7,10 @@ import { configureApp } from "../src/bootstrap.js";
 
 describe("health", () => {
   it("returns app status", async () => {
-    const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false });
+    const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
+      abortOnError: false,
+      logger: false
+    });
     configureApp(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
