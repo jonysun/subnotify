@@ -1,5 +1,7 @@
 .worktrees/
 node_modules
+.npm-cache/
+.vite/
 dist
 .env
 .env.local
