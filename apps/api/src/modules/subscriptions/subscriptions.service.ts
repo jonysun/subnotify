@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { AuthUser } from "../../common/decorators/current-user.decorator.js";
 import { DbService } from "../../db/db.service.js";
-import { subscriptionVersions, subscriptions } from "../../db/schema.js";
+import { subscriptionVersions, subscriptions, syncEvents } from "../../db/schema.js";
 
 const billingCycles = ["weekly", "monthly", "quarterly", "yearly", "custom"] as const;
 const subscriptionStatuses = ["active", "expired", "paused", "cancelled", "unavailable"] as const;
@@ -83,6 +83,7 @@ export class SubscriptionsService {
 
     const created = await this.get(user, id);
     await this.writeVersion(created, 1, now);
+    await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "subscriptions", resourceId: id, operation: "created", version: 1, data: created });
     return created;
   }
 
@@ -100,6 +101,7 @@ export class SubscriptionsService {
 
     const updated = await this.get(user, id);
     await this.writeVersion(updated, nextVersion, new Date().toISOString());
+    await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "subscriptions", resourceId: id, operation: "updated", version: nextVersion, data: updated });
     return updated;
   }
 
@@ -109,6 +111,7 @@ export class SubscriptionsService {
       .update(subscriptions)
       .set({ deletedAt: new Date().toISOString(), version: current.version + 1, updatedAt: new Date().toISOString() })
       .where(and(eq(subscriptions.id, id), eq(subscriptions.userId, user.id)));
+    await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "subscriptions", resourceId: id, operation: "deleted", version: current.version + 1, data: { id, deletedAt: new Date().toISOString() } });
     return { ok: true };
   }
 

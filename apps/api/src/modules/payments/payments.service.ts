@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { AuthUser } from "../../common/decorators/current-user.decorator.js";
 import { DbService } from "../../db/db.service.js";
-import { payments, subscriptions, userSettings } from "../../db/schema.js";
+import { payments, subscriptions, syncEvents, userSettings } from "../../db/schema.js";
 import { ExchangeRatesService } from "../exchange-rates/exchange-rates.service.js";
 
 const billingCycles = ["weekly", "monthly", "quarterly", "yearly", "custom"] as const;
@@ -66,19 +66,24 @@ export class PaymentsService {
     const values = await this.prepareValues(user, input);
     const id = randomUUID();
     await this.db.db.insert(payments).values({ id, userId: user.id, ...values });
-    return this.get(user, id);
+    const created = await this.get(user, id);
+    await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "payments", resourceId: id, operation: "created", version: created.version, data: created });
+    return created;
   }
 
   async update(user: AuthUser, id: string, input: UpdatePaymentInput) {
     await this.get(user, id);
     const values = await this.prepareValues(user, input);
     await this.db.db.update(payments).set({ ...values, version: 2, updatedAt: new Date().toISOString() }).where(eq(payments.id, id));
-    return this.get(user, id);
+    const updated = await this.get(user, id);
+    await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "payments", resourceId: id, operation: "updated", version: updated.version, data: updated });
+    return updated;
   }
 
   async softDelete(user: AuthUser, id: string) {
     await this.get(user, id);
     await this.db.db.update(payments).set({ deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).where(eq(payments.id, id));
+    await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "payments", resourceId: id, operation: "deleted", version: 1, data: { id, deletedAt: new Date().toISOString() } });
     return { ok: true };
   }
 

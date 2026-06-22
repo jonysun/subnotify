@@ -11,6 +11,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { PaymentsModule } from "./modules/payments/payments.module.js";
 import { RemindersModule } from "./modules/reminders/reminders.module.js";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module.js";
+import { SyncModule } from "./modules/sync/sync.module.js";
 import { UserSettingsModule } from "./modules/user-settings/user-settings.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 
@@ -29,7 +30,8 @@ import { UsersModule } from "./modules/users/users.module.js";
     RemindersModule,
     AuditModule,
     BackupsModule,
-    AdminModule
+    AdminModule,
+    SyncModule
   ]
 })
 export class AppModule {}
