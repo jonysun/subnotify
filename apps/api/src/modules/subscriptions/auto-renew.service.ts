@@ -1,13 +1,16 @@
-import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import { DbService } from "../../db/db.service.js";
 import { payments, subscriptions } from "../../db/schema.js";
+import { PaymentsService } from "../payments/payments.service.js";
 import { advanceDueDate } from "./billing-cycle.js";
 
 @Injectable()
 export class AutoRenewService {
-  constructor(@Inject(DbService) private readonly db: DbService) {}
+  constructor(
+    @Inject(DbService) private readonly db: DbService,
+    @Inject(PaymentsService) private readonly paymentsService: PaymentsService
+  ) {}
 
   async processDueSubscriptions(now = new Date()) {
     const due = await this.db.db
@@ -39,8 +42,7 @@ export class AutoRenewService {
         .limit(1);
 
       if (existingPayment.length === 0) {
-        await this.db.db.insert(payments).values({
-          id: randomUUID(),
+        await this.paymentsService.createAutoRenewal({
           userId: subscription.userId,
           subscriptionId: subscription.id,
           paidAt: subscription.nextDueDate,
@@ -48,15 +50,8 @@ export class AutoRenewService {
           periodEnd: nextDueDate,
           originalAmount: subscription.currentPrice,
           originalCurrency: subscription.currentCurrency,
-          baseAmount: subscription.currentPrice,
-          baseCurrency: subscription.currentCurrency,
-          exchangeRate: 1,
-          exchangeRateProvider: "mock",
-          isBaseAmountManual: false,
           paymentMethodSnapshot: subscription.paymentMethod,
-          cycleSnapshot: subscription.currentCycle,
-          source: "auto_renewal",
-          notes: "Automatic renewal"
+          cycleSnapshot: subscription.currentCycle
         });
       }
 
