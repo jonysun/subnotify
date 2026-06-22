@@ -1,7 +1,10 @@
 import { Module } from "@nestjs/common";
 import { AppConfigModule } from "./config/app-config.module.js";
 import { DbModule } from "./db/db.module.js";
+import { AdminModule } from "./modules/admin/admin.module.js";
+import { AuditModule } from "./modules/audit/audit.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
+import { BackupsModule } from "./modules/backups/backups.module.js";
 import { ExchangeRatesModule } from "./modules/exchange-rates/exchange-rates.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
@@ -23,7 +26,10 @@ import { UsersModule } from "./modules/users/users.module.js";
     ExchangeRatesModule,
     PaymentsModule,
     NotificationsModule,
-    RemindersModule
+    RemindersModule,
+    AuditModule,
+    BackupsModule,
+    AdminModule
   ]
 })
 export class AppModule {}
