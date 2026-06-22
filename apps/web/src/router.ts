@@ -2,6 +2,11 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
 import AppShell from "./components/AppShell.vue";
 import { useAuthStore } from "./stores/auth";
 import LoginView from "./views/LoginView.vue";
+import AdminAuditLogsView from "./views/admin/AuditLogsView.vue";
+import AdminBackupsView from "./views/admin/BackupsView.vue";
+import AdminSharedDataView from "./views/admin/SharedDataView.vue";
+import AdminSystemView from "./views/admin/SystemView.vue";
+import AdminUsersView from "./views/admin/UsersView.vue";
 import CalendarView from "./views/user/CalendarView.vue";
 import DashboardView from "./views/user/DashboardView.vue";
 import NotificationsView from "./views/user/NotificationsView.vue";
@@ -34,11 +39,11 @@ const routes: RouteRecordRaw[] = [
     meta: { admin: true },
     children: [
       { path: "", redirect: "/admin/users" },
-      { path: "users", component: PlaceholderView("Users", "Admin workspace") },
-      { path: "backups", component: PlaceholderView("Backups", "Admin workspace") },
-      { path: "system", component: PlaceholderView("System", "Admin workspace") },
-      { path: "shared-data", component: PlaceholderView("Shared Data", "Admin workspace") },
-      { path: "audit-logs", component: PlaceholderView("Audit Logs", "Admin workspace") }
+      { path: "users", component: AdminUsersView },
+      { path: "backups", component: AdminBackupsView },
+      { path: "system", component: AdminSystemView },
+      { path: "shared-data", component: AdminSharedDataView },
+      { path: "audit-logs", component: AdminAuditLogsView }
     ]
   }
 ];
