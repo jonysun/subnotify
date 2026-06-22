@@ -1,0 +1,13 @@
+.git
+.worktrees
+.npm-cache
+node_modules
+apps/api/dist
+apps/web/dist
+packages/shared/dist
+data
+backups
+*.log
+.env
+.env.*
+!/.env.example

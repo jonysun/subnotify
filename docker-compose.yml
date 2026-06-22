@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000
+      DB_DRIVER: sqlite
+      DATABASE_URL: file:/data/app.db
+      JWT_SECRET: change-this-production-secret
+      INITIAL_ADMIN_USERNAME: admin
+      INITIAL_ADMIN_PASSWORD: admin123456
+      INITIAL_ADMIN_DISPLAY_NAME: Administrator
+      BACKUP_DIR: /backups
+      EXCHANGE_RATE_PROVIDER: mock
+    volumes:
+      - sem-data:/data
+      - sem-backups:/backups
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: sem
+      POSTGRES_PASSWORD: sem
+      POSTGRES_DB: sem
+    volumes:
+      - sem-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  sem-data:
+  sem-backups:
+  sem-postgres:
