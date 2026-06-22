@@ -18,8 +18,8 @@ async function registerProductionWebUi(app: NestFastifyApplication, config: Conf
     return;
   }
 
-  await app.register(fastifyStatic, { root: webDist, prefix: "/", index: false });
-  app.getHttpAdapter().getInstance().setNotFoundHandler((request, reply) => {
+  await app.register(fastifyStatic, { root: webDist, prefix: "/", index: false, wildcard: false });
+  app.getHttpAdapter().getInstance().get("/*", (request, reply) => {
     if (request.url.startsWith("/api")) {
       reply.code(404).send({ statusCode: 404, message: "Not Found" });
       return;
