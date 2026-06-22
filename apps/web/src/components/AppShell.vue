@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, CalendarDays, CreditCard, DatabaseBackup, LayoutDashboard, LogOut, Settings, Shield, Users } from "lucide-vue-next";
+import { Bell, CalendarDays, CreditCard, DatabaseBackup, Gauge, LayoutDashboard, LogOut, Settings, Shield, Users } from "lucide-vue-next";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
@@ -10,6 +10,7 @@ const router = useRouter();
 const isAdminArea = computed(() => route.path.startsWith("/admin"));
 
 const userLinks = [
+  { to: "/app", label: "Dashboard", icon: Gauge },
   { to: "/app/subscriptions", label: "Subscriptions", icon: LayoutDashboard },
   { to: "/app/payments", label: "Payments", icon: CreditCard },
   { to: "/app/calendar", label: "Calendar", icon: CalendarDays },
