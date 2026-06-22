@@ -12,18 +12,22 @@ const tempDir = fileURLToPath(new URL("./tmp", import.meta.url));
 const dbPath = join(tempDir, "db.e2e.sqlite");
 const originalDbDriver = process.env.DB_DRIVER;
 const originalDatabaseUrl = process.env.DATABASE_URL;
+const originalNodeEnv = process.env.NODE_ENV;
 
 afterEach(async () => {
   process.env.DB_DRIVER = originalDbDriver;
   process.env.DATABASE_URL = originalDatabaseUrl;
+  process.env.NODE_ENV = originalNodeEnv;
   await rm(tempDir, { force: true, recursive: true });
 });
 
 describe("database", () => {
   it("creates a user with CNY settings", async () => {
+    await rm(tempDir, { force: true, recursive: true });
     await mkdir(dirname(dbPath), { recursive: true });
     process.env.DB_DRIVER = "sqlite";
     process.env.DATABASE_URL = `file:${dbPath}`;
+    process.env.NODE_ENV = "test";
 
     const app = await createTestApp();
     try {

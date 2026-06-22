@@ -12,6 +12,10 @@ export function configureApp(app: NestFastifyApplication) {
     credentials: true
   });
 
+  if (config.get("NODE_ENV", { infer: true }) === "test") {
+    return;
+  }
+
   const docs = new DocumentBuilder()
     .setTitle("Subscription Expense Manager API")
     .setVersion("0.1.0")
