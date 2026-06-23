@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/decorators/current-user.decorator.js";
 import { DbService } from "../../db/db.service.js";
 import { subscriptionVersions, subscriptions, syncEvents } from "../../db/schema.js";
+import { PaymentsService } from "../payments/payments.service.js";
 
 const billingCycles = ["weekly", "monthly", "quarterly", "yearly", "custom"] as const;
 const subscriptionStatuses = ["active", "expired", "paused", "cancelled", "unavailable"] as const;
@@ -23,7 +24,8 @@ const createSubscriptionSchema = z.object({
   autoRenew: z.boolean().default(false),
   categoryId: z.string().uuid().optional(),
   notes: z.string().max(2000).optional().default(""),
-  remindersEnabled: z.boolean().default(true)
+  remindersEnabled: z.boolean().default(true),
+  initialPaymentPaid: z.boolean().default(false)
 });
 const updateSubscriptionSchema = createSubscriptionSchema.partial();
 type CreateSubscriptionInput = z.infer<typeof createSubscriptionSchema>;
@@ -31,7 +33,10 @@ type UpdateSubscriptionInput = z.infer<typeof updateSubscriptionSchema>;
 
 @Injectable()
 export class SubscriptionsService {
-  constructor(@Inject(DbService) private readonly db: DbService) {}
+  constructor(
+    @Inject(DbService) private readonly db: DbService,
+    @Inject(PaymentsService) private readonly payments: PaymentsService
+  ) {}
 
   parseCreate(body: unknown) {
     return createSubscriptionSchema.parse(body);
@@ -83,6 +88,21 @@ export class SubscriptionsService {
 
     const created = await this.get(user, id);
     await this.writeVersion(created, 1, now);
+    if (input.initialPaymentPaid) {
+      await this.payments.create(user, {
+        subscriptionId: id,
+        paidAt: input.startDate,
+        periodStart: input.startDate,
+        periodEnd: input.nextDueDate,
+        originalAmount: input.currentPrice,
+        originalCurrency: input.currentCurrency,
+        isBaseAmountManual: false,
+        paymentMethodSnapshot: input.paymentMethod,
+        cycleSnapshot: input.currentCycle,
+        source: "manual",
+        notes: "Initial period payment"
+      });
+    }
     await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "subscriptions", resourceId: id, operation: "created", version: 1, data: created });
     return created;
   }
@@ -90,10 +110,11 @@ export class SubscriptionsService {
   async update(user: AuthUser, id: string, input: UpdateSubscriptionInput) {
     const current = await this.get(user, id);
     const nextVersion = current.version + 1;
+    const { initialPaymentPaid: _initialPaymentPaid, ...values } = input;
     await this.db.db
       .update(subscriptions)
       .set({
-        ...input,
+        ...values,
         version: nextVersion,
         updatedAt: new Date().toISOString()
       })

@@ -7,7 +7,8 @@ import { UserSettingsService } from "./user-settings.service.js";
 const updateSettingsSchema = z.object({
   baseCurrency: z.string().trim().length(3).transform((value) => value.toUpperCase()).optional(),
   exchangeRateProvider: z.string().trim().min(1).max(80).optional(),
-  dataSharingEnabled: z.boolean().optional()
+  dataSharingEnabled: z.boolean().optional(),
+  locale: z.enum(["zh-CN", "en-US"]).optional()
 });
 
 @Controller("me/settings")

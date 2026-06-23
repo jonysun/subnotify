@@ -29,7 +29,7 @@ export class UserSettingsService {
 
   async updateSettings(
     user: AuthUser,
-    input: Partial<{ baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean }>
+    input: Partial<{ baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean; locale: "zh-CN" | "en-US" }>
   ) {
     await this.getSettings(user);
     await this.db.db

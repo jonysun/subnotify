@@ -12,10 +12,28 @@ export type Subscription = {
   nextDueDate: string;
   status: string;
   autoRenew: boolean;
+  remindersEnabled: boolean;
+  startDate: string;
+  endDate?: string;
   notes: string;
 };
-export type Payment = { id: string; subscriptionId?: string; paidAt: string; originalAmount: number; originalCurrency: string; baseAmount: number; baseCurrency: string; source: string; notes: string };
-export type UserSettings = { baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean };
+export type Payment = {
+  id: string;
+  subscriptionId?: string;
+  paidAt: string;
+  periodStart?: string;
+  periodEnd?: string;
+  originalAmount: number;
+  originalCurrency: string;
+  baseAmount: number;
+  baseCurrency: string;
+  isBaseAmountManual: boolean;
+  paymentMethodSnapshot: string;
+  cycleSnapshot?: Subscription["currentCycle"];
+  source: "manual" | "auto_renewal" | "imported";
+  notes: string;
+};
+export type UserSettings = { baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean; locale: "zh-CN" | "en-US" };
 export type ReminderRule = { id: string; name: string; daysBefore: number; enabled: boolean; channelIds: string[] };
 export type NotificationChannel = { id: string; type: string; name: string; enabled: boolean; config: Record<string, unknown> };
 export type NotificationLog = { id: string; type: string; status: string; title: string; body: string; sentAt: string };
@@ -26,7 +44,7 @@ export type SharedUser = Pick<ApiUser, "id" | "username" | "displayName" | "role
 
 export const queries = {
   subscriptions: () => apiFetch<Subscription[]>("/api/subscriptions"),
-  createSubscription: (body: Partial<Subscription> & { startDate: string }) => apiFetch<Subscription>("/api/subscriptions", { method: "POST", body: JSON.stringify(body) }),
+  createSubscription: (body: Partial<Subscription> & { startDate: string; initialPaymentPaid?: boolean }) => apiFetch<Subscription>("/api/subscriptions", { method: "POST", body: JSON.stringify(body) }),
   payments: () => apiFetch<Payment[]>("/api/payments"),
   createPayment: (body: Partial<Payment> & { paidAt: string; originalAmount: number; originalCurrency: string }) => apiFetch<Payment>("/api/payments", { method: "POST", body: JSON.stringify(body) }),
   settings: () => apiFetch<UserSettings>("/api/me/settings"),
