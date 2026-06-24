@@ -41,7 +41,19 @@ export type Payment = {
   notes: string;
 };
 export type UserSettings = { baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean; locale: "zh-CN" | "en-US"; timeZone?: string };
-export type ReminderRule = { id: string; name: string; daysBefore: number; enabled: boolean; channelIds: string[] };
+export type ReminderRule = {
+  id: string;
+  subscriptionId?: string;
+  name: string;
+  daysBefore: number;
+  type: "before_expiry" | "on_expiry" | "after_expiry";
+  value: number;
+  unit: "days" | "hours";
+  repeatIntervalHours: number;
+  repeatUntil: "renewed" | "acknowledged" | "never";
+  enabled: boolean;
+  channelIds: string[];
+};
 export type NotificationChannel = { id: string; type: string; name: string; enabled: boolean; config: Record<string, unknown> };
 export type NotificationLog = { id: string; type: string; status: string; title: string; body: string; sentAt: string };
 export type Backup = { id: string; filename: string; storagePath: string; sizeBytes: number; databaseDriver: string; status: string; error: string; createdAt: string };
@@ -62,6 +74,8 @@ export const queries = {
   updateSettings: (body: Partial<UserSettings>) => apiFetch<UserSettings>("/api/me/settings", { method: "PATCH", body: JSON.stringify(body) }),
   reminderRules: () => apiFetch<ReminderRule[]>("/api/reminder-rules"),
   createReminderRule: (body: { name: string; daysBefore: number; channelIds: string[] }) => apiFetch<ReminderRule>("/api/reminder-rules", { method: "POST", body: JSON.stringify(body) }),
+  subscriptionReminderRules: (subscriptionId: string) => apiFetch<{ rules: ReminderRule[] }>(`/api/subscriptions/${subscriptionId}/reminders`),
+  replaceSubscriptionReminderRules: (subscriptionId: string, rules: Array<Partial<ReminderRule> & { name: string }>) => apiFetch<{ rules: ReminderRule[] }>(`/api/subscriptions/${subscriptionId}/reminders`, { method: "PUT", body: JSON.stringify({ rules }) }),
   notificationChannels: () => apiFetch<NotificationChannel[]>("/api/notification-channels"),
   createNotificationChannel: (body: { type: string; name: string; config: Record<string, unknown> }) => apiFetch<NotificationChannel>("/api/notification-channels", { method: "POST", body: JSON.stringify(body) }),
   notificationLogs: () => apiFetch<NotificationLog[]>("/api/notification-logs"),

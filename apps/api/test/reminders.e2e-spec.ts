@@ -122,4 +122,67 @@ describe("reminders and notifications", () => {
       await app.close();
     }
   });
+
+  it("replaces subscription-specific reminder rules and repeats after expiry hourly", async () => {
+    const app = await createTestApp();
+    try {
+      const { db, token, userId } = await createUserAndToken(app);
+      const auth = { Authorization: `Bearer ${token}` };
+
+      const subscription = await request(app.getHttpServer())
+        .post("/api/subscriptions")
+        .set(auth)
+        .send({
+          name: "Overdue Service",
+          currentCycle: "monthly",
+          currentPrice: 12,
+          currentCurrency: "CNY",
+          startDate: "2026-01-01T00:00:00.000Z",
+          nextDueDate: "2026-02-01T00:00:00.000Z",
+          remindersEnabled: true
+        })
+        .expect(201);
+
+      const replaced = await request(app.getHttpServer())
+        .put(`/api/subscriptions/${subscription.body.id}/reminders`)
+        .set(auth)
+        .send({
+          rules: [
+            { name: "到期前 1 天", type: "before_expiry", value: 1, unit: "days", enabled: true, channelIds: [] },
+            { name: "到期后每 6 小时", type: "after_expiry", value: 0, unit: "hours", repeatIntervalHours: 6, repeatUntil: "renewed", enabled: true, channelIds: [] }
+          ]
+        })
+        .expect(200);
+      expect(replaced.body.rules.map((rule: { type: string }) => rule.type)).toEqual(["before_expiry", "after_expiry"]);
+
+      const list = await request(app.getHttpServer()).get(`/api/subscriptions/${subscription.body.id}/reminders`).set(auth).expect(200);
+      expect(list.body.rules).toHaveLength(2);
+
+      const firstRun = await request(app.getHttpServer())
+        .post("/api/reminders/run")
+        .set(auth)
+        .send({ now: "2026-02-01T06:00:00.000Z" })
+        .expect(201);
+      expect(firstRun.body).toMatchObject({ scanned: 1, logged: 1 });
+
+      const duplicateWindow = await request(app.getHttpServer())
+        .post("/api/reminders/run")
+        .set(auth)
+        .send({ now: "2026-02-01T08:00:00.000Z" })
+        .expect(201);
+      expect(duplicateWindow.body).toMatchObject({ scanned: 1, logged: 0 });
+
+      const nextWindow = await request(app.getHttpServer())
+        .post("/api/reminders/run")
+        .set(auth)
+        .send({ now: "2026-02-01T12:00:00.000Z" })
+        .expect(201);
+      expect(nextWindow.body).toMatchObject({ scanned: 1, logged: 1 });
+
+      const logs = (await db.select().from(notificationLogs)).filter((log) => log.userId === userId && log.subscriptionId === subscription.body.id);
+      expect(logs).toHaveLength(2);
+    } finally {
+      await app.close();
+    }
+  });
 });

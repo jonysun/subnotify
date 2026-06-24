@@ -143,10 +143,15 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS reminder_rules (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    subscription_id TEXT REFERENCES subscriptions(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    days_before INTEGER NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
+      subscription_id TEXT REFERENCES subscriptions(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      days_before INTEGER NOT NULL,
+      type TEXT NOT NULL DEFAULT 'before_expiry',
+      value INTEGER NOT NULL DEFAULT 0,
+      unit TEXT NOT NULL DEFAULT 'days',
+      repeat_interval_hours INTEGER NOT NULL DEFAULT 0,
+      repeat_until TEXT NOT NULL DEFAULT 'renewed',
+      enabled INTEGER NOT NULL DEFAULT 1,
     channel_ids TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -229,6 +234,11 @@ export function migrateSqlite(database: Database.Database) {
   addColumnIfMissing(database, "subscription_versions", "intro_price", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(database, "subscription_versions", "renewal_price", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(database, "subscription_versions", "renewal_currency", "TEXT NOT NULL DEFAULT 'CNY'");
+  addColumnIfMissing(database, "reminder_rules", "type", "TEXT NOT NULL DEFAULT 'before_expiry'");
+  addColumnIfMissing(database, "reminder_rules", "value", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "reminder_rules", "unit", "TEXT NOT NULL DEFAULT 'days'");
+  addColumnIfMissing(database, "reminder_rules", "repeat_interval_hours", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "reminder_rules", "repeat_until", "TEXT NOT NULL DEFAULT 'renewed'");
 }
 
 function addColumnIfMissing(database: Database.Database, tableName: string, columnName: string, definition: string) {

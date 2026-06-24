@@ -5,7 +5,7 @@ import { computed, reactive, ref, watch } from "vue";
 import AppModal from "../../components/AppModal.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import StatusBadge from "../../components/StatusBadge.vue";
-import { queries, type Subscription } from "../../api/queries";
+import { queries, type ReminderRule, type Subscription } from "../../api/queries";
 import { useI18n, type MessageKey } from "../../i18n";
 
 type BillingCycle = Subscription["currentCycle"];
@@ -29,7 +29,18 @@ type SubscriptionForm = {
   initialPaymentPaid: boolean;
   categoryName: string;
   tagText: string;
+  reminderRules: ReminderRuleForm[];
   notes: string;
+};
+type ReminderRuleForm = {
+  name: string;
+  type: ReminderRule["type"];
+  value: number;
+  unit: ReminderRule["unit"];
+  repeatIntervalHours: number;
+  repeatUntil: ReminderRule["repeatUntil"];
+  enabled: boolean;
+  channelIds: string[];
 };
 
 const subscriptionsQuery = useQuery({ queryKey: ["subscriptions"], queryFn: queries.subscriptions });
@@ -82,8 +93,19 @@ function emptyForm(): SubscriptionForm {
     initialPaymentPaid: false,
     categoryName: "",
     tagText: "",
+    reminderRules: defaultReminderRules(),
     notes: ""
   };
+}
+
+function defaultReminderRules(): ReminderRuleForm[] {
+  return [
+    { name: "到期前 7 天", type: "before_expiry", value: 7, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "到期前 3 天", type: "before_expiry", value: 3, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "到期前 1 天", type: "before_expiry", value: 1, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "到期当天", type: "on_expiry", value: 0, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "到期后每 24 小时", type: "after_expiry", value: 0, unit: "hours", repeatIntervalHours: 24, repeatUntil: "renewed", enabled: false, channelIds: [] }
+  ];
 }
 
 function dateOnly(value?: string | null) {
@@ -140,10 +162,38 @@ function openEdit(item: Subscription) {
     initialPaymentPaid: false,
     categoryName: item.category?.name ?? "",
     tagText: (item.tags ?? []).map((tag) => tag.name).join(", "),
+    reminderRules: [],
     notes: item.notes
   });
   editingId.value = item.id;
   modalOpen.value = true;
+  loadReminderRules(item.id);
+}
+
+async function loadReminderRules(subscriptionId: string) {
+  const result = await queries.subscriptionReminderRules(subscriptionId);
+  form.reminderRules = result.rules.length > 0 ? result.rules.map(toReminderForm) : defaultReminderRules();
+}
+
+function toReminderForm(rule: ReminderRule): ReminderRuleForm {
+  return {
+    name: rule.name,
+    type: rule.type,
+    value: rule.value ?? rule.daysBefore,
+    unit: rule.unit ?? "days",
+    repeatIntervalHours: rule.repeatIntervalHours ?? 0,
+    repeatUntil: rule.repeatUntil ?? "renewed",
+    enabled: rule.enabled,
+    channelIds: rule.channelIds ?? []
+  };
+}
+
+function addReminderRule() {
+  form.reminderRules.push({ name: "到期前 7 天", type: "before_expiry", value: 7, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] });
+}
+
+function removeReminderRule(index: number) {
+  form.reminderRules.splice(index, 1);
 }
 
 watch(
@@ -176,12 +226,14 @@ async function save() {
     tagNames: tagNames(form.tagText),
     notes: form.notes
   };
+  let saved: Subscription;
   if (editingId.value) {
     const { initialPaymentPaid: _initialPaymentPaid, ...updatePayload } = payload;
-    await queries.updateSubscription(editingId.value, updatePayload);
+    saved = await queries.updateSubscription(editingId.value, updatePayload);
   } else {
-    await queries.createSubscription(payload);
+    saved = await queries.createSubscription(payload);
   }
+  await queries.replaceSubscriptionReminderRules(saved.id, form.reminderRules);
   modalOpen.value = false;
   await subscriptionsQuery.refetch();
   await paymentsQuery.refetch();
@@ -327,6 +379,24 @@ const paymentsBySubscription = computed(() => {
       <label class="check-row"><input v-model="form.autoRenew" type="checkbox" /><span>{{ t("autoRenew") }}</span></label>
       <label class="check-row"><input v-model="form.remindersEnabled" type="checkbox" /><span>{{ t("remindersEnabled") }}</span></label>
       <label v-if="!editingId" class="check-row"><input v-model="form.initialPaymentPaid" type="checkbox" /><span>{{ t("firstPeriodPaid") }}</span></label>
+      <section class="full-field reminder-editor">
+        <div class="section-heading">
+          <h3>提醒规则</h3>
+          <button class="small-button" type="button" @click="addReminderRule">添加规则</button>
+        </div>
+        <div class="reminder-rule-row reminder-rule-head">
+          <span>启用</span><span>名称</span><span>类型</span><span>数值</span><span>单位</span><span>重复小时</span><span>操作</span>
+        </div>
+        <div v-for="(rule, index) in form.reminderRules" :key="index" class="reminder-rule-row">
+          <input v-model="rule.enabled" type="checkbox" />
+          <input v-model="rule.name" />
+          <select v-model="rule.type"><option value="before_expiry">到期前</option><option value="on_expiry">到期当天</option><option value="after_expiry">到期后</option></select>
+          <input v-model.number="rule.value" min="0" type="number" />
+          <select v-model="rule.unit"><option value="days">天</option><option value="hours">小时</option></select>
+          <input v-model.number="rule.repeatIntervalHours" :disabled="rule.type !== 'after_expiry'" min="0" type="number" />
+          <button class="small-button danger-button" type="button" @click="removeReminderRule(index)">删除</button>
+        </div>
+      </section>
       <label class="full-field"><span>{{ t("notes") }}</span><textarea v-model="form.notes" /></label>
       <div class="modal-actions"><button class="small-button" type="button" @click="modalOpen = false">{{ t("cancel") }}</button><button class="primary-button compact-button" type="submit">{{ t("save") }}</button></div>
     </form>

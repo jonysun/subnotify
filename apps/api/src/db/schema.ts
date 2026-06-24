@@ -201,6 +201,11 @@ export const reminderRules = sqliteTable(
     subscriptionId: text("subscription_id").references(() => subscriptions.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     daysBefore: integer("days_before").notNull(),
+    type: text("type", { enum: ["before_expiry", "on_expiry", "after_expiry"] }).notNull().default("before_expiry"),
+    value: integer("value").notNull().default(0),
+    unit: text("unit", { enum: ["days", "hours"] }).notNull().default("days"),
+    repeatIntervalHours: integer("repeat_interval_hours").notNull().default(0),
+    repeatUntil: text("repeat_until", { enum: ["renewed", "acknowledged", "never"] }).notNull().default("renewed"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     channelIds: text("channel_ids", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
     ...timestamps
