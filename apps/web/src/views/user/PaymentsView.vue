@@ -32,7 +32,7 @@ const today = new Date().toISOString().slice(0, 10);
 const modalOpen = ref(false);
 const editingId = ref("");
 const form = reactive<PaymentForm>(emptyForm());
-const filters = reactive({
+const defaultFilters = {
   search: "",
   subscriptionId: "",
   category: "",
@@ -42,7 +42,9 @@ const filters = reactive({
   amountMin: "",
   amountMax: "",
   sort: "dateDesc"
-});
+};
+const filters = reactive({ ...defaultFilters });
+const appliedFilters = reactive({ ...defaultFilters });
 const cycleOptions: Array<{ value: BillingCycle; labelKey: MessageKey }> = [
   { value: "weekly", labelKey: "weekly" },
   { value: "monthly", labelKey: "monthly" },
@@ -154,30 +156,39 @@ async function remove(item: Payment) {
   await paymentsQuery.refetch();
 }
 
+function applyFilters() {
+  Object.assign(appliedFilters, filters);
+}
+
+function resetFilters() {
+  Object.assign(filters, defaultFilters);
+  Object.assign(appliedFilters, defaultFilters);
+}
+
 const filteredPayments = computed(() => {
-  const query = filters.search.trim().toLowerCase();
-  const min = filters.amountMin === "" ? undefined : Number(filters.amountMin);
-  const max = filters.amountMax === "" ? undefined : Number(filters.amountMax);
+  const query = appliedFilters.search.trim().toLowerCase();
+  const min = appliedFilters.amountMin === "" ? undefined : Number(appliedFilters.amountMin);
+  const max = appliedFilters.amountMax === "" ? undefined : Number(appliedFilters.amountMax);
   return [...(paymentsQuery.data.value ?? [])]
     .filter((item) => {
       const subscription = item.subscriptionId ? subscriptionById.value.get(item.subscriptionId) : undefined;
       const searchable = [subscription?.name, subscription?.category?.name, ...(subscription?.tags ?? []).map((tag) => tag.name), item.paymentMethodSnapshot, item.source, item.notes].join(" ").toLowerCase();
       if (query && !searchable.includes(query)) return false;
-      if (filters.subscriptionId && item.subscriptionId !== filters.subscriptionId) return false;
-      if (filters.category && subscription?.category?.name !== filters.category) return false;
-      if (filters.tag && !(subscription?.tags ?? []).some((tag) => tag.name === filters.tag)) return false;
+      if (appliedFilters.subscriptionId && item.subscriptionId !== appliedFilters.subscriptionId) return false;
+      if (appliedFilters.category && subscription?.category?.name !== appliedFilters.category) return false;
+      if (appliedFilters.tag && !(subscription?.tags ?? []).some((tag) => tag.name === appliedFilters.tag)) return false;
       const paid = dateOnly(item.paidAt);
-      if (filters.fromDate && paid < filters.fromDate) return false;
-      if (filters.toDate && paid > filters.toDate) return false;
+      if (appliedFilters.fromDate && paid < appliedFilters.fromDate) return false;
+      if (appliedFilters.toDate && paid > appliedFilters.toDate) return false;
       if (min !== undefined && item.baseAmount < min) return false;
       if (max !== undefined && item.baseAmount > max) return false;
       return true;
     })
     .sort((a, b) => {
-      if (filters.sort === "dateAsc") return a.paidAt.localeCompare(b.paidAt);
-      if (filters.sort === "amountAsc") return a.baseAmount - b.baseAmount;
-      if (filters.sort === "amountDesc") return b.baseAmount - a.baseAmount;
-      if (filters.sort === "subscriptionAsc") return (subscriptionById.value.get(a.subscriptionId ?? "")?.name ?? "").localeCompare(subscriptionById.value.get(b.subscriptionId ?? "")?.name ?? "");
+      if (appliedFilters.sort === "dateAsc") return a.paidAt.localeCompare(b.paidAt);
+      if (appliedFilters.sort === "amountAsc") return a.baseAmount - b.baseAmount;
+      if (appliedFilters.sort === "amountDesc") return b.baseAmount - a.baseAmount;
+      if (appliedFilters.sort === "subscriptionAsc") return (subscriptionById.value.get(a.subscriptionId ?? "")?.name ?? "").localeCompare(subscriptionById.value.get(b.subscriptionId ?? "")?.name ?? "");
       return b.paidAt.localeCompare(a.paidAt);
     });
 });
@@ -199,6 +210,10 @@ const filteredPayments = computed(() => {
       <label><span>{{ t("amountMin") }}</span><input v-model="filters.amountMin" min="0" step="0.01" type="number" /></label>
       <label><span>{{ t("amountMax") }}</span><input v-model="filters.amountMax" min="0" step="0.01" type="number" /></label>
       <label><span>{{ t("sort") }}</span><select v-model="filters.sort"><option value="dateDesc">{{ t("date") }} ↓</option><option value="dateAsc">{{ t("date") }} ↑</option><option value="amountDesc">{{ t("baseAmount") }} ↓</option><option value="amountAsc">{{ t("baseAmount") }} ↑</option><option value="subscriptionAsc">{{ t("subscription") }} ↑</option></select></label>
+      <div class="filter-actions">
+        <button class="primary-button compact-button" type="button" @click="applyFilters">{{ t("search") }}</button>
+        <button class="small-button" type="button" @click="resetFilters">{{ t("reset") }}</button>
+      </div>
     </div>
     <EmptyState v-if="paymentsQuery.data.value?.length === 0" :title="t('noPayments')" text="Payments will appear here after they are recorded." />
     <div v-else class="table-list">

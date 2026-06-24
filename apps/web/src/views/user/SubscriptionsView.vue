@@ -40,7 +40,7 @@ const expandedId = ref("");
 const editingId = ref("");
 const modalOpen = ref(false);
 const form = reactive<SubscriptionForm>(emptyForm());
-const filters = reactive({
+const defaultFilters = {
   search: "",
   category: "",
   tag: "",
@@ -49,7 +49,9 @@ const filters = reactive({
   amountMin: "",
   amountMax: "",
   sort: "dueAsc"
-});
+};
+const filters = reactive({ ...defaultFilters });
+const appliedFilters = reactive({ ...defaultFilters });
 const cycleOptions: Array<{ value: BillingCycle; labelKey: MessageKey }> = [
   { value: "weekly", labelKey: "weekly" },
   { value: "monthly", labelKey: "monthly" },
@@ -192,32 +194,41 @@ async function remove(item: Subscription) {
   await subscriptionsQuery.refetch();
 }
 
+function applyFilters() {
+  Object.assign(appliedFilters, filters);
+}
+
+function resetFilters() {
+  Object.assign(filters, defaultFilters);
+  Object.assign(appliedFilters, defaultFilters);
+}
+
 const categories = computed(() => [...new Set((subscriptionsQuery.data.value ?? []).map((item) => item.category?.name).filter(Boolean))] as string[]);
 const tags = computed(() => [...new Set((subscriptionsQuery.data.value ?? []).flatMap((item) => (item.tags ?? []).map((tag) => tag.name)))]);
 
 const filteredSubscriptions = computed(() => {
-  const query = filters.search.trim().toLowerCase();
-  const min = filters.amountMin === "" ? undefined : Number(filters.amountMin);
-  const max = filters.amountMax === "" ? undefined : Number(filters.amountMax);
+  const query = appliedFilters.search.trim().toLowerCase();
+  const min = appliedFilters.amountMin === "" ? undefined : Number(appliedFilters.amountMin);
+  const max = appliedFilters.amountMax === "" ? undefined : Number(appliedFilters.amountMax);
   return [...(subscriptionsQuery.data.value ?? [])]
     .filter((item) => {
       const searchable = [item.name, item.siteUrl, item.paymentMethod, item.notes, item.category?.name, ...(item.tags ?? []).map((tag) => tag.name)].join(" ").toLowerCase();
       if (query && !searchable.includes(query)) return false;
-      if (filters.category && item.category?.name !== filters.category) return false;
-      if (filters.tag && !(item.tags ?? []).some((tag) => tag.name === filters.tag)) return false;
+      if (appliedFilters.category && item.category?.name !== appliedFilters.category) return false;
+      if (appliedFilters.tag && !(item.tags ?? []).some((tag) => tag.name === appliedFilters.tag)) return false;
       const due = dateOnly(item.nextDueDate);
-      if (filters.fromDate && due < filters.fromDate) return false;
-      if (filters.toDate && due > filters.toDate) return false;
+      if (appliedFilters.fromDate && due < appliedFilters.fromDate) return false;
+      if (appliedFilters.toDate && due > appliedFilters.toDate) return false;
       if (min !== undefined && item.currentPrice < min) return false;
       if (max !== undefined && item.currentPrice > max) return false;
       return true;
     })
     .sort((a, b) => {
-      if (filters.sort === "dueDesc") return b.nextDueDate.localeCompare(a.nextDueDate);
-      if (filters.sort === "amountAsc") return a.currentPrice - b.currentPrice;
-      if (filters.sort === "amountDesc") return b.currentPrice - a.currentPrice;
-      if (filters.sort === "nameAsc") return a.name.localeCompare(b.name);
-      if (filters.sort === "nameDesc") return b.name.localeCompare(a.name);
+      if (appliedFilters.sort === "dueDesc") return b.nextDueDate.localeCompare(a.nextDueDate);
+      if (appliedFilters.sort === "amountAsc") return a.currentPrice - b.currentPrice;
+      if (appliedFilters.sort === "amountDesc") return b.currentPrice - a.currentPrice;
+      if (appliedFilters.sort === "nameAsc") return a.name.localeCompare(b.name);
+      if (appliedFilters.sort === "nameDesc") return b.name.localeCompare(a.name);
       return a.nextDueDate.localeCompare(b.nextDueDate);
     });
 });
@@ -249,6 +260,10 @@ const paymentsBySubscription = computed(() => {
       <label><span>{{ t("amountMin") }}</span><input v-model="filters.amountMin" min="0" step="0.01" type="number" /></label>
       <label><span>{{ t("amountMax") }}</span><input v-model="filters.amountMax" min="0" step="0.01" type="number" /></label>
       <label><span>{{ t("sort") }}</span><select v-model="filters.sort"><option value="dueAsc">{{ t("nextDue") }} ↑</option><option value="dueDesc">{{ t("nextDue") }} ↓</option><option value="amountAsc">{{ t("amount") }} ↑</option><option value="amountDesc">{{ t("amount") }} ↓</option><option value="nameAsc">{{ t("name") }} ↑</option><option value="nameDesc">{{ t("name") }} ↓</option></select></label>
+      <div class="filter-actions">
+        <button class="primary-button compact-button" type="button" @click="applyFilters">{{ t("search") }}</button>
+        <button class="small-button" type="button" @click="resetFilters">{{ t("reset") }}</button>
+      </div>
     </div>
     <EmptyState v-if="subscriptionsQuery.data.value?.length === 0" :title="t('noSubscriptions')" text="Create a subscription to start tracking renewals." />
     <div v-else class="table-list subscription-list">

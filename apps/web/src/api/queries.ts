@@ -40,7 +40,7 @@ export type Payment = {
   source: "manual" | "auto_renewal" | "imported";
   notes: string;
 };
-export type UserSettings = { baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean; locale: "zh-CN" | "en-US" };
+export type UserSettings = { baseCurrency: string; exchangeRateProvider: string; dataSharingEnabled: boolean; locale: "zh-CN" | "en-US"; timeZone?: string };
 export type ReminderRule = { id: string; name: string; daysBefore: number; enabled: boolean; channelIds: string[] };
 export type NotificationChannel = { id: string; type: string; name: string; enabled: boolean; config: Record<string, unknown> };
 export type NotificationLog = { id: string; type: string; status: string; title: string; body: string; sentAt: string };
