@@ -5,8 +5,9 @@ import { computed, reactive, ref, watch } from "vue";
 import AppModal from "../../components/AppModal.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { queries, type Payment, type Subscription } from "../../api/queries";
-import { useI18n } from "../../i18n";
+import { useI18n, type MessageKey } from "../../i18n";
 
+type BillingCycle = Subscription["currentCycle"];
 type PaymentForm = {
   paidAt: string;
   subscriptionId: string;
@@ -18,7 +19,7 @@ type PaymentForm = {
   baseCurrency: string;
   isBaseAmountManual: boolean;
   paymentMethodSnapshot: string;
-  cycleSnapshot: "" | Subscription["currentCycle"];
+  cycleSnapshot: "" | BillingCycle;
   source: "manual" | "auto_renewal" | "imported";
   notes: string;
 };
@@ -31,7 +32,28 @@ const today = new Date().toISOString().slice(0, 10);
 const modalOpen = ref(false);
 const editingId = ref("");
 const form = reactive<PaymentForm>(emptyForm());
+const filters = reactive({
+  search: "",
+  subscriptionId: "",
+  category: "",
+  tag: "",
+  fromDate: "",
+  toDate: "",
+  amountMin: "",
+  amountMax: "",
+  sort: "dateDesc"
+});
+const cycleOptions: Array<{ value: BillingCycle; labelKey: MessageKey }> = [
+  { value: "weekly", labelKey: "weekly" },
+  { value: "monthly", labelKey: "monthly" },
+  { value: "quarterly", labelKey: "quarterly" },
+  { value: "yearly", labelKey: "yearly" },
+  { value: "one_time", labelKey: "oneTime" },
+  { value: "custom", labelKey: "custom" }
+];
 const subscriptionById = computed(() => new Map((subscriptionsQuery.data.value ?? []).map((item) => [item.id, item])));
+const categories = computed(() => [...new Set((subscriptionsQuery.data.value ?? []).map((item) => item.category?.name).filter(Boolean))] as string[]);
+const tags = computed(() => [...new Set((subscriptionsQuery.data.value ?? []).flatMap((item) => (item.tags ?? []).map((tag) => tag.name)))]);
 
 function emptyForm(): PaymentForm {
   return {
@@ -57,6 +79,11 @@ function dateOnly(value?: string | null) {
 
 function toDateTime(value?: string) {
   return value ? `${value}T00:00:00.000Z` : undefined;
+}
+
+function cycleLabel(cycle?: BillingCycle | "") {
+  const option = cycleOptions.find((item) => item.value === cycle);
+  return option ? t(option.labelKey) : "-";
 }
 
 function openCreate(subscriptionId = "") {
@@ -90,7 +117,8 @@ function hydrateFromSubscription() {
   if (!form.subscriptionId || editingId.value) return;
   const subscription = subscriptionById.value.get(form.subscriptionId);
   if (!subscription) return;
-  form.originalAmount = subscription.currentPrice;
+  const introAmount = subscription.introPeriods > 0 && subscription.introPrice > 0 ? subscription.introPrice : subscription.currentPrice;
+  form.originalAmount = introAmount;
   form.originalCurrency = subscription.currentCurrency;
   form.paymentMethodSnapshot = subscription.paymentMethod;
   form.cycleSnapshot = subscription.currentCycle;
@@ -125,6 +153,34 @@ async function remove(item: Payment) {
   await queries.deletePayment(item.id);
   await paymentsQuery.refetch();
 }
+
+const filteredPayments = computed(() => {
+  const query = filters.search.trim().toLowerCase();
+  const min = filters.amountMin === "" ? undefined : Number(filters.amountMin);
+  const max = filters.amountMax === "" ? undefined : Number(filters.amountMax);
+  return [...(paymentsQuery.data.value ?? [])]
+    .filter((item) => {
+      const subscription = item.subscriptionId ? subscriptionById.value.get(item.subscriptionId) : undefined;
+      const searchable = [subscription?.name, subscription?.category?.name, ...(subscription?.tags ?? []).map((tag) => tag.name), item.paymentMethodSnapshot, item.source, item.notes].join(" ").toLowerCase();
+      if (query && !searchable.includes(query)) return false;
+      if (filters.subscriptionId && item.subscriptionId !== filters.subscriptionId) return false;
+      if (filters.category && subscription?.category?.name !== filters.category) return false;
+      if (filters.tag && !(subscription?.tags ?? []).some((tag) => tag.name === filters.tag)) return false;
+      const paid = dateOnly(item.paidAt);
+      if (filters.fromDate && paid < filters.fromDate) return false;
+      if (filters.toDate && paid > filters.toDate) return false;
+      if (min !== undefined && item.baseAmount < min) return false;
+      if (max !== undefined && item.baseAmount > max) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (filters.sort === "dateAsc") return a.paidAt.localeCompare(b.paidAt);
+      if (filters.sort === "amountAsc") return a.baseAmount - b.baseAmount;
+      if (filters.sort === "amountDesc") return b.baseAmount - a.baseAmount;
+      if (filters.sort === "subscriptionAsc") return (subscriptionById.value.get(a.subscriptionId ?? "")?.name ?? "").localeCompare(subscriptionById.value.get(b.subscriptionId ?? "")?.name ?? "");
+      return b.paidAt.localeCompare(a.paidAt);
+    });
+});
 </script>
 
 <template>
@@ -133,18 +189,29 @@ async function remove(item: Payment) {
       <h1>{{ t("payments") }}</h1>
       <button class="primary-button compact-button" type="button" @click="openCreate()"><Plus :size="18" /> <span>{{ t("addPayment") }}</span></button>
     </header>
+    <div class="filter-panel">
+      <label><span>{{ t("search") }}</span><input v-model="filters.search" :placeholder="t('subscription')" /></label>
+      <label><span>{{ t("subscription") }}</span><select v-model="filters.subscriptionId"><option value="">{{ t("all") }}</option><option v-for="item in subscriptionsQuery.data.value" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+      <label><span>{{ t("category") }}</span><select v-model="filters.category"><option value="">{{ t("all") }}</option><option v-for="category in categories" :key="category" :value="category">{{ category }}</option></select></label>
+      <label><span>{{ t("tags") }}</span><select v-model="filters.tag"><option value="">{{ t("all") }}</option><option v-for="tag in tags" :key="tag" :value="tag">{{ tag }}</option></select></label>
+      <label><span>{{ t("fromDate") }}</span><input v-model="filters.fromDate" type="date" /></label>
+      <label><span>{{ t("toDate") }}</span><input v-model="filters.toDate" type="date" /></label>
+      <label><span>{{ t("amountMin") }}</span><input v-model="filters.amountMin" min="0" step="0.01" type="number" /></label>
+      <label><span>{{ t("amountMax") }}</span><input v-model="filters.amountMax" min="0" step="0.01" type="number" /></label>
+      <label><span>{{ t("sort") }}</span><select v-model="filters.sort"><option value="dateDesc">{{ t("date") }} ↓</option><option value="dateAsc">{{ t("date") }} ↑</option><option value="amountDesc">{{ t("baseAmount") }} ↓</option><option value="amountAsc">{{ t("baseAmount") }} ↑</option><option value="subscriptionAsc">{{ t("subscription") }} ↑</option></select></label>
+    </div>
     <EmptyState v-if="paymentsQuery.data.value?.length === 0" :title="t('noPayments')" text="Payments will appear here after they are recorded." />
     <div v-else class="table-list">
       <div class="table-head payment-grid">
-        <span>{{ t("date") }}</span><span>{{ t("subscription") }}</span><span>{{ t("amount") }}</span><span>{{ t("baseAmount") }}</span><span>{{ t("paymentMethod") }}</span><span>{{ t("source") }}</span><span>{{ t("actions") }}</span>
+        <span>{{ t("date") }}</span><span>{{ t("subscription") }}</span><span>{{ t("amount") }}</span><span>{{ t("baseAmount") }}</span><span>{{ t("paymentMethod") }}</span><span>{{ t("cycle") }}</span><span>{{ t("actions") }}</span>
       </div>
-      <div v-for="item in paymentsQuery.data.value" :key="item.id" class="table-row payment-grid">
+      <div v-for="item in filteredPayments" :key="item.id" class="table-row payment-grid">
         <span>{{ dateOnly(item.paidAt) }}</span>
         <span>{{ item.subscriptionId ? subscriptionById.get(item.subscriptionId)?.name ?? item.subscriptionId : "-" }}</span>
         <span>{{ item.originalAmount }} {{ item.originalCurrency }}</span>
         <span>{{ item.baseAmount }} {{ item.baseCurrency }}</span>
         <span>{{ item.paymentMethodSnapshot || "-" }}</span>
-        <span>{{ item.source }}</span>
+        <span>{{ cycleLabel(item.cycleSnapshot) }}</span>
         <span class="row-actions"><button class="small-button" type="button" @click="openEdit(item)"><Edit3 :size="15" /> <span>{{ t("edit") }}</span></button><button class="small-button danger-button" type="button" @click="remove(item)"><Trash2 :size="15" /> <span>{{ t("delete") }}</span></button></span>
       </div>
     </div>
@@ -162,7 +229,7 @@ async function remove(item: Payment) {
       <label><span>{{ t("baseAmount") }}</span><input v-model.number="form.baseAmount" :disabled="!form.isBaseAmountManual" min="0" step="0.01" type="number" /></label>
       <label><span>{{ t("baseCurrency") }}</span><input v-model="form.baseCurrency" :placeholder="settingsQuery.data.value?.baseCurrency ?? 'CNY'" maxlength="3" /></label>
       <label><span>{{ t("paymentMethod") }}</span><input v-model="form.paymentMethodSnapshot" /></label>
-      <label><span>{{ t("cycle") }}</span><select v-model="form.cycleSnapshot"><option value="">-</option><option>weekly</option><option>monthly</option><option>quarterly</option><option>yearly</option><option>custom</option></select></label>
+      <label><span>{{ t("cycle") }}</span><select v-model="form.cycleSnapshot"><option value="">-</option><option v-for="option in cycleOptions" :key="option.value" :value="option.value">{{ t(option.labelKey) }}</option></select></label>
       <label><span>{{ t("source") }}</span><select v-model="form.source"><option>manual</option><option>auto_renewal</option><option>imported</option></select></label>
       <label class="full-field"><span>{{ t("notes") }}</span><textarea v-model="form.notes" /></label>
       <div class="modal-actions"><button class="small-button" type="button" @click="modalOpen = false">{{ t("cancel") }}</button><button class="primary-button compact-button" type="submit">{{ t("save") }}</button></div>

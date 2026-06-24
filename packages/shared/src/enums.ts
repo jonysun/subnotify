@@ -7,7 +7,7 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 export const SUBSCRIPTION_STATUSES = ["active", "expired", "paused", "cancelled", "unavailable"] as const;
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
-export const BILLING_CYCLES = ["weekly", "monthly", "quarterly", "yearly", "custom"] as const;
+export const BILLING_CYCLES = ["weekly", "monthly", "quarterly", "yearly", "custom", "one_time"] as const;
 export type BillingCycle = (typeof BILLING_CYCLES)[number];
 
 export const PAYMENT_SOURCES = ["manual", "auto_renewal", "imported"] as const;

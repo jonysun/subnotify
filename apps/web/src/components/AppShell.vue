@@ -32,6 +32,11 @@ const adminLinks: Array<{ to: string; labelKey: MessageKey; icon: typeof Gauge }
 ];
 const links = computed(() => (isAdminArea.value ? adminLinks : userLinks));
 
+function isActiveLink(path: string) {
+  if (path === "/app") return route.path === "/app";
+  return route.path === path || route.path.startsWith(`${path}/`);
+}
+
 function logout() {
   auth.logout();
   router.push("/login");
@@ -49,7 +54,7 @@ function logout() {
         </div>
       </div>
       <nav class="nav-list" aria-label="Primary">
-        <RouterLink v-for="item in links" :key="item.to" :to="item.to" class="nav-link">
+        <RouterLink v-for="item in links" :key="item.to" :to="item.to" class="nav-link" :class="{ active: isActiveLink(item.to) }">
           <component :is="item.icon" :size="18" aria-hidden="true" />
           <span>{{ t(item.labelKey) }}</span>
         </RouterLink>

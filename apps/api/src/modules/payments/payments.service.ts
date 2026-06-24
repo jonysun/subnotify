@@ -7,7 +7,7 @@ import { DbService } from "../../db/db.service.js";
 import { payments, subscriptions, syncEvents, userSettings } from "../../db/schema.js";
 import { ExchangeRatesService } from "../exchange-rates/exchange-rates.service.js";
 
-const billingCycles = ["weekly", "monthly", "quarterly", "yearly", "custom"] as const;
+const billingCycles = ["weekly", "monthly", "quarterly", "yearly", "custom", "one_time"] as const;
 const currencySchema = z.string().trim().length(3).transform((value) => value.toUpperCase());
 const createPaymentSchema = z.object({
   subscriptionId: z.string().uuid().optional(),
@@ -96,7 +96,7 @@ export class PaymentsService {
     originalAmount: number;
     originalCurrency: string;
     paymentMethodSnapshot: string;
-    cycleSnapshot: "weekly" | "monthly" | "quarterly" | "yearly" | "custom";
+    cycleSnapshot: "weekly" | "monthly" | "quarterly" | "yearly" | "custom" | "one_time";
   }) {
     const user = { id: input.userId, username: "", role: "user", status: "active" } as const;
     return this.create(user, { ...input, isBaseAmountManual: false, source: "auto_renewal", notes: "Automatic renewal" });

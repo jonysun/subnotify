@@ -6,15 +6,22 @@ export type Subscription = {
   name: string;
   siteUrl: string;
   paymentMethod: string;
-  currentCycle: "weekly" | "monthly" | "quarterly" | "yearly" | "custom";
+  currentCycle: "weekly" | "monthly" | "quarterly" | "yearly" | "custom" | "one_time";
   currentPrice: number;
   currentCurrency: string;
+  introPeriods: number;
+  introPrice: number;
+  renewalPrice: number;
+  renewalCurrency: string;
   nextDueDate: string;
   status: string;
   autoRenew: boolean;
   remindersEnabled: boolean;
   startDate: string;
   endDate?: string;
+  categoryId?: string;
+  category?: { id: string; name: string; color: string } | null;
+  tags: Array<{ id: string; name: string; color: string }>;
   notes: string;
 };
 export type Payment = {
@@ -44,8 +51,8 @@ export type SharedUser = Pick<ApiUser, "id" | "username" | "displayName" | "role
 
 export const queries = {
   subscriptions: () => apiFetch<Subscription[]>("/api/subscriptions"),
-  createSubscription: (body: Partial<Subscription> & { startDate: string; initialPaymentPaid?: boolean }) => apiFetch<Subscription>("/api/subscriptions", { method: "POST", body: JSON.stringify(body) }),
-  updateSubscription: (id: string, body: Partial<Subscription>) => apiFetch<Subscription>(`/api/subscriptions/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  createSubscription: (body: Partial<Subscription> & { startDate: string; initialPaymentPaid?: boolean; categoryName?: string; tagNames?: string[] }) => apiFetch<Subscription>("/api/subscriptions", { method: "POST", body: JSON.stringify(body) }),
+  updateSubscription: (id: string, body: Partial<Subscription> & { categoryName?: string; tagNames?: string[] }) => apiFetch<Subscription>(`/api/subscriptions/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteSubscription: (id: string) => apiFetch<{ ok: boolean }>(`/api/subscriptions/${id}`, { method: "DELETE" }),
   payments: () => apiFetch<Payment[]>("/api/payments"),
   createPayment: (body: Partial<Payment> & { paidAt: string; originalAmount: number; originalCurrency: string }) => apiFetch<Payment>("/api/payments", { method: "POST", body: JSON.stringify(body) }),

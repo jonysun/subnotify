@@ -1,4 +1,4 @@
-export type BillingCycle = "weekly" | "monthly" | "quarterly" | "yearly" | "custom";
+export type BillingCycle = "weekly" | "monthly" | "quarterly" | "yearly" | "custom" | "one_time";
 
 export function advanceDueDate(date: Date, cycle: BillingCycle) {
   const next = new Date(date.getTime());
@@ -15,6 +15,10 @@ export function advanceDueDate(date: Date, cycle: BillingCycle) {
 
   if (cycle === "yearly") {
     next.setUTCFullYear(next.getUTCFullYear() + 1);
+    return next;
+  }
+
+  if (cycle === "one_time") {
     return next;
   }
 

@@ -25,7 +25,7 @@ export class AutoRenewService {
       );
 
     for (const subscription of due) {
-      if (!subscription.autoRenew) {
+      if (!subscription.autoRenew || subscription.currentCycle === "one_time") {
         await this.db.db
           .update(subscriptions)
           .set({ status: "expired", updatedAt: now.toISOString(), version: subscription.version + 1 })
@@ -48,8 +48,8 @@ export class AutoRenewService {
           paidAt: subscription.nextDueDate,
           periodStart,
           periodEnd: nextDueDate,
-          originalAmount: subscription.currentPrice,
-          originalCurrency: subscription.currentCurrency,
+          originalAmount: subscription.renewalPrice > 0 ? subscription.renewalPrice : subscription.currentPrice,
+          originalCurrency: subscription.renewalCurrency || subscription.currentCurrency,
           paymentMethodSnapshot: subscription.paymentMethod,
           cycleSnapshot: subscription.currentCycle
         });

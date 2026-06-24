@@ -56,6 +56,10 @@ const statements = [
     current_cycle TEXT NOT NULL,
     current_price REAL NOT NULL,
     current_currency TEXT NOT NULL DEFAULT 'CNY',
+    intro_periods INTEGER NOT NULL DEFAULT 0,
+    intro_price REAL NOT NULL DEFAULT 0,
+    renewal_price REAL NOT NULL DEFAULT 0,
+    renewal_currency TEXT NOT NULL DEFAULT 'CNY',
     start_date TEXT NOT NULL,
     end_date TEXT,
     next_due_date TEXT NOT NULL,
@@ -81,6 +85,10 @@ const statements = [
     billing_cycle TEXT NOT NULL,
     price REAL NOT NULL,
     currency TEXT NOT NULL DEFAULT 'CNY',
+    intro_periods INTEGER NOT NULL DEFAULT 0,
+    intro_price REAL NOT NULL DEFAULT 0,
+    renewal_price REAL NOT NULL DEFAULT 0,
+    renewal_currency TEXT NOT NULL DEFAULT 'CNY',
     start_date TEXT NOT NULL,
     end_date TEXT,
     status TEXT NOT NULL DEFAULT 'active',
@@ -213,4 +221,19 @@ export function migrateSqlite(database: Database.Database) {
     }
   });
   migrate();
+  addColumnIfMissing(database, "subscriptions", "intro_periods", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "subscriptions", "intro_price", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "subscriptions", "renewal_price", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "subscriptions", "renewal_currency", "TEXT NOT NULL DEFAULT 'CNY'");
+  addColumnIfMissing(database, "subscription_versions", "intro_periods", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "subscription_versions", "intro_price", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "subscription_versions", "renewal_price", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "subscription_versions", "renewal_currency", "TEXT NOT NULL DEFAULT 'CNY'");
+}
+
+function addColumnIfMissing(database: Database.Database, tableName: string, columnName: string, definition: string) {
+  const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === columnName)) {
+    database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
 }

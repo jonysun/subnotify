@@ -73,15 +73,30 @@ describe("subscriptions", () => {
           name: "Music",
           siteUrl: "https://example.com",
           paymentMethod: "Visa",
-          currentCycle: "monthly",
+          currentCycle: "one_time",
           currentPrice: 20,
           currentCurrency: "CNY",
+          introPeriods: 2,
+          introPrice: 10,
+          renewalPrice: 20,
+          renewalCurrency: "CNY",
+          categoryName: "影音",
+          tagNames: ["家庭", "优惠"],
           startDate: "2026-01-01T00:00:00.000Z",
           nextDueDate: "2026-02-01T00:00:00.000Z",
           autoRenew: false,
           notes: "family"
         })
         .expect(201);
+      expect(created.body).toMatchObject({
+        currentCycle: "one_time",
+        introPeriods: 2,
+        introPrice: 10,
+        renewalPrice: 20,
+        renewalCurrency: "CNY",
+        category: { name: "影音" }
+      });
+      expect(created.body.tags.map((tag: { name: string }) => tag.name).sort()).toEqual(["优惠", "家庭"]);
 
       const firstVersions = await db
         .select()
@@ -92,9 +107,10 @@ describe("subscriptions", () => {
       const updated = await request(app.getHttpServer())
         .patch(`/api/subscriptions/${created.body.id}`)
         .set(auth)
-        .send({ currentCycle: "yearly", currentPrice: 200 })
+        .send({ currentCycle: "yearly", currentPrice: 200, tagNames: ["年度"] })
         .expect(200);
       expect(updated.body).toMatchObject({ currentCycle: "yearly", version: 2 });
+      expect(updated.body.tags.map((tag: { name: string }) => tag.name)).toEqual(["年度"]);
 
       const versions = await request(app.getHttpServer())
         .get(`/api/subscriptions/${created.body.id}/versions`)
