@@ -110,6 +110,7 @@ a { color: inherit; text-decoration: none; }
 .view-panel h1 { margin: 8px 0 0; font-size: 30px; letter-spacing: 0; }
 
 .page-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-bottom: 24px; }
+.dashboard-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-bottom: 24px; }
 .stat-card, .table-panel, .form-panel {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -192,8 +193,17 @@ a { color: inherit; text-decoration: none; }
 }
 .data-row > span { min-width: 0; overflow-wrap: anywhere; }
 .payment-detail-grid { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.dashboard-row { grid-template-columns: 1.2fr 0.9fr 0.9fr 0.8fr; }
 .payment-detail-row:nth-child(odd) { background: #eef2ff; }
 .payment-detail-row:nth-child(even) { background: #f9fafb; }
+.rank-list { display: grid; gap: 14px; }
+.rank-row { display: grid; gap: 7px; }
+.rank-row div { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #34424d; }
+.rank-row strong, .rank-row span { min-width: 0; overflow-wrap: anywhere; }
+.rank-row progress { width: 100%; height: 10px; overflow: hidden; border: 0; border-radius: 999px; background: #e5e7eb; }
+.rank-row progress::-webkit-progress-bar { background: #e5e7eb; border-radius: 999px; }
+.rank-row progress::-webkit-progress-value { background: #4f46e5; border-radius: 999px; }
+.rank-row progress::-moz-progress-bar { background: #4f46e5; border-radius: 999px; }
 .admin-row { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
 .audit-row { grid-template-columns: minmax(145px, 0.8fr) minmax(180px, 1.2fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) minmax(180px, 1.2fr); }
 .select-row { width: 100%; border-color: #e4e8eb; cursor: pointer; text-align: left; }
@@ -325,8 +335,8 @@ a { color: inherit; text-decoration: none; }
   .mobile-link.active { color: #4f46e5; background: #eef2ff; }
   .page-container { padding: 18px 12px; }
   .page-titlebar { min-height: 44px; }
-  .page-grid, .split-page, .filter-panel { grid-template-columns: 1fr; }
-  .data-row, .audit-row, .table-head, .table-row, .subscription-grid, .payment-grid, .payment-detail-grid, .detail-grid { grid-template-columns: 1fr; align-items: start; }
+  .page-grid, .dashboard-layout, .split-page, .filter-panel { grid-template-columns: 1fr; }
+  .data-row, .audit-row, .table-head, .table-row, .subscription-grid, .payment-grid, .payment-detail-grid, .dashboard-row, .detail-grid { grid-template-columns: 1fr; align-items: start; }
   .table-head { display: none; }
   .table-row { cursor: pointer; }
   .modal-backdrop { align-items: stretch; padding: 0; }

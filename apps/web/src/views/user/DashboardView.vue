@@ -1,88 +1,79 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import { computed } from "vue";
 import EmptyState from "../../components/EmptyState.vue";
 import StatCard from "../../components/StatCard.vue";
-import StatusBadge from "../../components/StatusBadge.vue";
-import { queries, type Subscription } from "../../api/queries";
-import { useI18n } from "../../i18n";
+import { queries } from "../../api/queries";
 
-const subscriptionsQuery = useQuery({ queryKey: ["subscriptions"], queryFn: queries.subscriptions });
-const paymentsQuery = useQuery({ queryKey: ["payments"], queryFn: queries.payments });
-const { t } = useI18n();
-const activeCount = computed(() => subscriptionsQuery.data.value?.filter((item) => item.status === "active").length ?? 0);
-const spend = computed(() => (paymentsQuery.data.value ?? []).reduce((sum, item) => sum + item.baseAmount, 0));
-const now = new Date();
-const upcoming = computed(() => {
-  const start = startOfDay(now);
-  const end = new Date(start.getTime());
-  end.setUTCDate(end.getUTCDate() + 15);
-  return [...(subscriptionsQuery.data.value ?? [])]
-    .filter((item) => item.status === "active" && isBetween(item.nextDueDate, start, end))
-    .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
-});
-const monthlyAverage = computed(() => activeSubscriptions().reduce((sum, item) => sum + monthlyAmount(item), 0));
-const yearlyAverage = computed(() => activeSubscriptions().reduce((sum, item) => sum + yearlyAmount(item), 0));
-const nextMonthSpend = computed(() => {
-  const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1));
-  return activeSubscriptions()
-    .filter((item) => isBetween(item.nextDueDate, nextMonth, monthEnd, false))
-    .reduce((sum, item) => sum + renewalAmount(item), 0);
-});
+const dashboardQuery = useQuery({ queryKey: ["dashboard-stats"], queryFn: queries.dashboardStats });
 
-function activeSubscriptions() {
-  return (subscriptionsQuery.data.value ?? []).filter((item) => item.status === "active");
+function money(amount?: number, currency?: string) {
+  return `${(amount ?? 0).toFixed(2)} ${currency ?? "CNY"}`;
 }
 
-function startOfDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function isBetween(value: string, start: Date, end: Date, includeEnd = true) {
-  const date = new Date(value);
-  return date >= start && (includeEnd ? date <= end : date < end);
-}
-
-function renewalAmount(item: Subscription) {
-  return item.renewalPrice > 0 ? item.renewalPrice : item.currentPrice;
-}
-
-function monthlyAmount(item: Subscription) {
-  const amount = renewalAmount(item);
-  if (item.currentCycle === "weekly") return (amount * 52) / 12;
-  if (item.currentCycle === "quarterly") return amount / 3;
-  if (item.currentCycle === "yearly") return amount / 12;
-  if (item.currentCycle === "one_time") return 0;
-  return amount;
-}
-
-function yearlyAmount(item: Subscription) {
-  if (item.currentCycle === "one_time") {
-    const due = new Date(item.nextDueDate);
-    const end = new Date(now.getTime());
-    end.setUTCFullYear(end.getUTCFullYear() + 1);
-    return due >= now && due <= end ? renewalAmount(item) : 0;
-  }
-  return monthlyAmount(item) * 12;
+function dateOnly(value?: string) {
+  return value ? value.slice(0, 10) : "";
 }
 </script>
+
 <template>
   <section class="page-grid">
-    <StatCard :label="t('activeSubscriptions')" :value="String(activeCount)" :detail="t('currentlyUsableRecords')" />
-    <StatCard :label="t('recordedSpend')" :value="spend.toFixed(2)" :detail="t('baseCurrencyTotal')" />
-    <StatCard :label="t('upcomingRenewals')" :value="String(upcoming.length)" :detail="t('nextDueRecords')" />
-    <StatCard :label="t('averageMonthlySpend')" :value="monthlyAverage.toFixed(2)" :detail="t('currentlyUsableRecords')" />
-    <StatCard :label="t('nextMonthSpend')" :value="nextMonthSpend.toFixed(2)" :detail="t('baseCurrencyTotal')" />
-    <StatCard :label="t('averageYearlySpend')" :value="yearlyAverage.toFixed(2)" :detail="t('baseCurrencyTotal')" />
+    <StatCard label="本月支出" :value="money(dashboardQuery.data.value?.monthlyExpense.amount, dashboardQuery.data.value?.monthlyExpense.currency)" detail="按实际支付记录统计" />
+    <StatCard label="今年支出" :value="money(dashboardQuery.data.value?.yearlyExpense.amount, dashboardQuery.data.value?.yearlyExpense.currency)" :detail="`月均 ${money(dashboardQuery.data.value?.yearlyExpense.monthlyAverage, dashboardQuery.data.value?.yearlyExpense.currency)}`" />
+    <StatCard label="有效订阅" :value="String(dashboardQuery.data.value?.activeSubscriptions.active ?? 0)" :detail="`总计 ${dashboardQuery.data.value?.activeSubscriptions.total ?? 0} 条`" />
+    <StatCard label="即将到期" :value="String(dashboardQuery.data.value?.activeSubscriptions.expiringSoon ?? 0)" detail="未来 7 天需要关注" />
   </section>
-  <section class="table-panel">
-    <header><h1>{{ t("upcoming") }}</h1></header>
-    <EmptyState v-if="upcoming.length === 0" :title="t('noRenewals')" text="Upcoming subscription renewals will appear here." />
-    <div v-else class="row-list">
-      <div v-for="item in upcoming" :key="item.id" class="data-row">
-        <span>{{ item.name }}</span><span>{{ item.nextDueDate.slice(0, 10) }}</span><StatusBadge :status="item.status" />
+
+  <section class="dashboard-layout">
+    <article class="table-panel">
+      <header><h1>近期支付</h1></header>
+      <EmptyState v-if="(dashboardQuery.data.value?.recentPayments ?? []).length === 0" title="暂无近期支付" text="最近 7 天的支付会显示在这里。" />
+      <div v-else class="row-list">
+        <div class="table-head dashboard-row"><span>订阅</span><span>日期</span><span>金额</span><span>来源</span></div>
+        <div v-for="payment in dashboardQuery.data.value?.recentPayments" :key="payment.id" class="data-row dashboard-row">
+          <span>{{ payment.name }}</span>
+          <span>{{ dateOnly(payment.paidAt) }}</span>
+          <span>{{ money(payment.amount, payment.currency) }}</span>
+          <span>{{ payment.source }}</span>
+        </div>
       </div>
-    </div>
+    </article>
+
+    <article class="table-panel">
+      <header><h1>即将续费</h1></header>
+      <EmptyState v-if="(dashboardQuery.data.value?.upcomingRenewals ?? []).length === 0" title="暂无续费计划" text="未来 7 天的续费会显示在这里。" />
+      <div v-else class="row-list">
+        <div class="table-head dashboard-row"><span>订阅</span><span>到期日</span><span>金额</span><span>状态</span></div>
+        <div v-for="renewal in dashboardQuery.data.value?.upcomingRenewals" :key="renewal.id" class="data-row dashboard-row">
+          <span>{{ renewal.name }}</span>
+          <span>{{ dateOnly(renewal.renewalDate) }}</span>
+          <span>{{ money(renewal.amount, renewal.currency) }}</span>
+          <span>{{ renewal.autoRenew ? "自动续费" : `${renewal.daysUntilRenewal} 天后` }}</span>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="dashboard-layout">
+    <article class="table-panel">
+      <header><h1>分类支出排行</h1></header>
+      <EmptyState v-if="(dashboardQuery.data.value?.expenseByCategory ?? []).length === 0" title="暂无分类统计" text="有支付记录后会按分类汇总。" />
+      <div v-else class="rank-list">
+        <div v-for="item in dashboardQuery.data.value?.expenseByCategory" :key="item.category" class="rank-row">
+          <div><strong>{{ item.category }}</strong><span>{{ money(item.amount, dashboardQuery.data.value?.yearlyExpense.currency) }}</span></div>
+          <progress :value="item.percentage" max="100" />
+        </div>
+      </div>
+    </article>
+
+    <article class="table-panel">
+      <header><h1>周期支出排行</h1></header>
+      <EmptyState v-if="(dashboardQuery.data.value?.expenseByType ?? []).length === 0" title="暂无周期统计" text="有支付记录后会按账期汇总。" />
+      <div v-else class="rank-list">
+        <div v-for="item in dashboardQuery.data.value?.expenseByType" :key="item.type" class="rank-row">
+          <div><strong>{{ item.type }}</strong><span>{{ money(item.amount, dashboardQuery.data.value?.yearlyExpense.currency) }}</span></div>
+          <progress :value="item.percentage" max="100" />
+        </div>
+      </div>
+    </article>
   </section>
 </template>

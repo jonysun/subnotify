@@ -246,6 +246,27 @@ async function remove(item: Subscription) {
   await subscriptionsQuery.refetch();
 }
 
+async function renew(item: Subscription) {
+  const amountText = window.prompt("续订金额", String(item.renewalPrice || item.currentPrice));
+  if (amountText === null) return;
+  const amount = Number(amountText);
+  if (!Number.isFinite(amount) || amount < 0) return;
+  await queries.renewSubscription(item.id, {
+    paidAt: new Date().toISOString(),
+    amount,
+    currency: item.renewalCurrency || item.currentCurrency,
+    periods: 1,
+    note: "手动续订"
+  });
+  await subscriptionsQuery.refetch();
+  await paymentsQuery.refetch();
+}
+
+async function toggleStatus(item: Subscription) {
+  await queries.updateSubscriptionStatus(item.id, item.status === "active" ? "paused" : "active");
+  await subscriptionsQuery.refetch();
+}
+
 function applyFilters() {
   Object.assign(appliedFilters, filters);
 }
@@ -340,6 +361,8 @@ const paymentsBySubscription = computed(() => {
             <span>{{ t("notes") }}: {{ item.notes || "-" }}</span>
           </div>
           <div class="detail-actions">
+            <button class="small-button" type="button" @click="renew(item)">手动续订</button>
+            <button class="small-button" type="button" @click="toggleStatus(item)">{{ item.status === "active" ? "停用" : "启用" }}</button>
             <button class="small-button" type="button" @click="openEdit(item)"><Edit3 :size="15" /> <span>{{ t("edit") }}</span></button>
             <button class="small-button danger-button" type="button" @click="remove(item)"><Trash2 :size="15" /> <span>{{ t("delete") }}</span></button>
           </div>

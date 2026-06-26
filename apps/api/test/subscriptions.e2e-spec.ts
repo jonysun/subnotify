@@ -164,6 +164,21 @@ describe("subscriptions", () => {
 
       const autoPayments = await db.select().from(payments).where(eq(payments.subscriptionId, renewing.body.id));
       expect(autoPayments[0]).toMatchObject({ source: "auto_renewal", originalAmount: 30, baseAmount: 30 });
+
+      const manual = await request(app.getHttpServer())
+        .post(`/api/subscriptions/${renewing.body.id}/renew`)
+        .set(auth)
+        .send({ paidAt: "2026-02-10T00:00:00.000Z", amount: 35, periods: 2, note: "manual top-up" })
+        .expect(201);
+      expect(manual.body.subscription).toMatchObject({ nextDueDate: "2026-04-10T00:00:00.000Z" });
+      expect(manual.body.payment).toMatchObject({ source: "manual", originalAmount: 35, periodEnd: "2026-04-10T00:00:00.000Z" });
+
+      const paused = await request(app.getHttpServer())
+        .patch(`/api/subscriptions/${renewing.body.id}/status`)
+        .set(auth)
+        .send({ status: "paused" })
+        .expect(200);
+      expect(paused.body).toMatchObject({ status: "paused" });
     } finally {
       await app.close();
     }

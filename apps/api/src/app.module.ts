@@ -5,6 +5,7 @@ import { AdminModule } from "./modules/admin/admin.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
 import { BackupsModule } from "./modules/backups/backups.module.js";
+import { DashboardModule } from "./modules/dashboard/dashboard.module.js";
 import { ExchangeRatesModule } from "./modules/exchange-rates/exchange-rates.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
@@ -24,6 +25,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     UsersModule,
     UserSettingsModule,
     SubscriptionsModule,
+    DashboardModule,
     ExchangeRatesModule,
     PaymentsModule,
     NotificationsModule,

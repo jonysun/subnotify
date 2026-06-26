@@ -6,6 +6,7 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator.js
 import { DbService } from "../../db/db.service.js";
 import { categories, subscriptionTags, subscriptionVersions, subscriptions, syncEvents, tags } from "../../db/schema.js";
 import { PaymentsService } from "../payments/payments.service.js";
+import { advanceDueDate } from "./billing-cycle.js";
 
 const billingCycles = ["weekly", "monthly", "quarterly", "yearly", "custom", "one_time"] as const;
 const subscriptionStatuses = ["active", "expired", "paused", "cancelled", "unavailable"] as const;
@@ -35,8 +36,17 @@ const createSubscriptionSchema = z.object({
   initialPaymentPaid: z.boolean().default(false)
 });
 const updateSubscriptionSchema = createSubscriptionSchema.partial();
+const renewSubscriptionSchema = z.object({
+  paidAt: z.string().datetime().optional(),
+  amount: z.number().nonnegative().optional(),
+  currency: currencySchema.optional(),
+  periods: z.number().int().positive().max(120).default(1),
+  note: z.string().max(500).optional().default("手动续订")
+});
+const updateStatusSchema = z.object({ status: z.enum(subscriptionStatuses) });
 type CreateSubscriptionInput = z.infer<typeof createSubscriptionSchema>;
 type UpdateSubscriptionInput = z.infer<typeof updateSubscriptionSchema>;
+type RenewSubscriptionInput = z.infer<typeof renewSubscriptionSchema>;
 
 @Injectable()
 export class SubscriptionsService {
@@ -51,6 +61,14 @@ export class SubscriptionsService {
 
   parseUpdate(body: unknown) {
     return updateSubscriptionSchema.parse(body);
+  }
+
+  parseRenew(body: unknown) {
+    return renewSubscriptionSchema.parse(body);
+  }
+
+  parseStatus(body: unknown) {
+    return updateStatusSchema.parse(body);
   }
 
   async list(user: AuthUser) {
@@ -157,6 +175,47 @@ export class SubscriptionsService {
       .where(and(eq(subscriptions.id, id), eq(subscriptions.userId, user.id)));
     await this.db.db.insert(syncEvents).values({ id: randomUUID(), userId: user.id, resource: "subscriptions", resourceId: id, operation: "deleted", version: current.version + 1, data: { id, deletedAt: new Date().toISOString() } });
     return { ok: true };
+  }
+
+  async updateStatus(user: AuthUser, id: string, input: z.infer<typeof updateStatusSchema>) {
+    await this.get(user, id);
+    await this.db.db
+      .update(subscriptions)
+      .set({ status: input.status, updatedAt: new Date().toISOString() })
+      .where(and(eq(subscriptions.id, id), eq(subscriptions.userId, user.id)));
+    return this.get(user, id);
+  }
+
+  async renew(user: AuthUser, id: string, input: RenewSubscriptionInput) {
+    const subscription = await this.get(user, id);
+    const paidAt = input.paidAt ?? new Date().toISOString();
+    const periodStart = subscription.nextDueDate > paidAt ? subscription.nextDueDate : paidAt;
+    let periodEnd = new Date(periodStart);
+    for (let i = 0; i < input.periods; i += 1) {
+      periodEnd = advanceDueDate(periodEnd, subscription.currentCycle);
+    }
+    const nextDueDate = periodEnd.toISOString();
+    const amount = input.amount ?? (subscription.renewalPrice > 0 ? subscription.renewalPrice : subscription.currentPrice);
+    const currency = input.currency ?? subscription.renewalCurrency ?? subscription.currentCurrency;
+    const payment = await this.payments.create(user, {
+      subscriptionId: id,
+      paidAt,
+      periodStart,
+      periodEnd: nextDueDate,
+      originalAmount: amount,
+      originalCurrency: currency,
+      isBaseAmountManual: false,
+      paymentMethodSnapshot: subscription.paymentMethod,
+      cycleSnapshot: subscription.currentCycle,
+      source: "manual",
+      notes: input.note
+    });
+    await this.db.db
+      .update(subscriptions)
+      .set({ nextDueDate, status: "active", updatedAt: new Date().toISOString(), version: subscription.version + 1 })
+      .where(and(eq(subscriptions.id, id), eq(subscriptions.userId, user.id)));
+    const updated = await this.get(user, id);
+    return { subscription: updated, payment };
   }
 
   async versions(user: AuthUser, id: string) {

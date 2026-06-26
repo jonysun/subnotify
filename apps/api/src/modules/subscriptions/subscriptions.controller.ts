@@ -33,6 +33,16 @@ export class SubscriptionsController {
     return this.subscriptions.softDelete(user, id);
   }
 
+  @Post(":id/renew")
+  renew(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.subscriptions.renew(user, id, this.subscriptions.parseRenew(body));
+  }
+
+  @Patch(":id/status")
+  status(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.subscriptions.updateStatus(user, id, this.subscriptions.parseStatus(body));
+  }
+
   @Get(":id/versions")
   versions(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.subscriptions.versions(user, id);

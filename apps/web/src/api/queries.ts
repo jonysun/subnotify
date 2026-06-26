@@ -60,12 +60,26 @@ export type Backup = { id: string; filename: string; storagePath: string; sizeBy
 export type SystemStatus = { databaseDriver: string; appVersion: string; storagePath: string; userCount: number };
 export type AuditLog = { id: string; actorId: string | null; action: string; targetType: string; targetId: string; metadata: Record<string, unknown>; createdAt: string };
 export type SharedUser = Pick<ApiUser, "id" | "username" | "displayName" | "role" | "status">;
+export type DashboardStats = {
+  monthlyExpense: { amount: number; currency: string };
+  yearlyExpense: { amount: number; monthlyAverage: number; currency: string };
+  activeSubscriptions: { active: number; total: number; expiringSoon: number };
+  recentPayments: Array<{ id: string; subscriptionId?: string; name: string; amount: number; currency: string; paidAt: string; source: string }>;
+  upcomingRenewals: Array<{ id: string; name: string; amount: number; currency: string; renewalDate: string; daysUntilRenewal: number; autoRenew: boolean }>;
+  expenseByCategory: Array<{ category: string; amount: number; percentage: number }>;
+  expenseByType: Array<{ type: string; amount: number; percentage: number }>;
+  schedulerStatus: null | Record<string, unknown>;
+  schedulerStatusHistory: unknown[];
+};
 
 export const queries = {
+  dashboardStats: () => apiFetch<DashboardStats>("/api/dashboard/stats"),
   subscriptions: () => apiFetch<Subscription[]>("/api/subscriptions"),
   createSubscription: (body: Partial<Subscription> & { startDate: string; initialPaymentPaid?: boolean; categoryName?: string; tagNames?: string[] }) => apiFetch<Subscription>("/api/subscriptions", { method: "POST", body: JSON.stringify(body) }),
   updateSubscription: (id: string, body: Partial<Subscription> & { categoryName?: string; tagNames?: string[] }) => apiFetch<Subscription>(`/api/subscriptions/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteSubscription: (id: string) => apiFetch<{ ok: boolean }>(`/api/subscriptions/${id}`, { method: "DELETE" }),
+  renewSubscription: (id: string, body: { paidAt?: string; amount?: number; currency?: string; periods?: number; note?: string }) => apiFetch<{ subscription: Subscription; payment: Payment }>(`/api/subscriptions/${id}/renew`, { method: "POST", body: JSON.stringify(body) }),
+  updateSubscriptionStatus: (id: string, status: Subscription["status"]) => apiFetch<Subscription>(`/api/subscriptions/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   payments: () => apiFetch<Payment[]>("/api/payments"),
   createPayment: (body: Partial<Payment> & { paidAt: string; originalAmount: number; originalCurrency: string }) => apiFetch<Payment>("/api/payments", { method: "POST", body: JSON.stringify(body) }),
   updatePayment: (id: string, body: Partial<Payment>) => apiFetch<Payment>(`/api/payments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
