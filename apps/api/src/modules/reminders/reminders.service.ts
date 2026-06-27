@@ -5,7 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { AuthUser } from "../../common/decorators/current-user.decorator.js";
 import { DbService } from "../../db/db.service.js";
-import { notificationChannels, notificationLogs, reminderRules, subscriptions } from "../../db/schema.js";
+import { notificationChannels, notificationLogs, reminderRules, schedulerLogs, subscriptions, users } from "../../db/schema.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 
 const createRuleSchema = z.object({
@@ -88,12 +88,17 @@ export class RemindersService {
   }
 
   async run(user: AuthUser, now = new Date()) {
+    const startedAt = new Date().toISOString();
     const activeSubscriptions = await this.db.db
       .select()
       .from(subscriptions)
       .where(and(eq(subscriptions.userId, user.id), eq(subscriptions.status, "active"), eq(subscriptions.remindersEnabled, true), isNull(subscriptions.deletedAt)));
 
     let logged = 0;
+    let matched = 0;
+    let deduped = 0;
+    let sent = 0;
+    let failed = 0;
     for (const subscription of activeSubscriptions) {
       const dueRules = await this.rulesForSubscription(user.id, subscription.id);
       for (const rule of dueRules) {
@@ -101,6 +106,7 @@ export class RemindersService {
         if (!bucket) {
           continue;
         }
+        matched += 1;
 
         const sentAt = bucket;
         const duplicate = await this.db.db
@@ -117,16 +123,17 @@ export class RemindersService {
           )
           .limit(1);
         if (duplicate[0]) {
+          deduped += 1;
           continue;
         }
 
         const channelIds = (rule.channelIds as string[]) ?? [];
         if (channelIds.length === 0) {
-          await this.notifications.sendToChannel(
+          const log = await this.notifications.sendToChannel(
             user.id,
             null,
             "webhook",
-            { url: "dry-run" },
+            { dryRun: true, url: "dry-run" },
             { title: `Subscription due: ${subscription.name}`, body: `${subscription.name} is due on ${subscription.nextDueDate}` },
             "subscription_reminder",
             subscription.id,
@@ -134,6 +141,8 @@ export class RemindersService {
             sentAt
           );
           logged += 1;
+          if (log.status === "sent") sent += 1;
+          else failed += 1;
           continue;
         }
 
@@ -147,7 +156,7 @@ export class RemindersService {
           if (!channel || !channel.enabled) {
             continue;
           }
-          await this.notifications.sendToChannel(
+          const log = await this.notifications.sendToChannel(
             user.id,
             channel.id,
             channel.type,
@@ -159,16 +168,39 @@ export class RemindersService {
             sentAt
           );
           logged += 1;
+          if (log.status === "sent") sent += 1;
+          else failed += 1;
         }
       }
     }
 
-    return { scanned: activeSubscriptions.length, logged };
+    const status = failed > 0 && sent === 0 ? "error" : "ok";
+    await this.db.db.insert(schedulerLogs).values({
+      id: randomUUID(),
+      userId: user.id,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      checkedCount: activeSubscriptions.length,
+      matchedCount: matched,
+      dedupedCount: deduped,
+      sentCount: sent,
+      failedCount: failed,
+      status,
+      reason: matched === 0 ? "No due reminder rules" : `Matched ${matched}, sent ${sent}, failed ${failed}, deduped ${deduped}`,
+      metadata: { manual: true }
+    });
+
+    return { scanned: activeSubscriptions.length, matched, deduped, sent, failed, logged };
   }
 
   @Cron("0 8 * * *")
   async scheduledScan() {
-    return { ok: true };
+    const activeUsers = await this.db.db.select().from(users).where(and(eq(users.status, "active"), isNull(users.deletedAt)));
+    const results = [];
+    for (const user of activeUsers) {
+      results.push(await this.run({ id: user.id, username: user.username, role: user.role, status: user.status }));
+    }
+    return { ok: true, users: activeUsers.length, results };
   }
 
   private async get(user: AuthUser, id: string) {

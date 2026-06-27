@@ -169,6 +169,21 @@ const statements = [
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   "CREATE INDEX IF NOT EXISTS notification_channels_user_idx ON notification_channels (user_id)",
+  `CREATE TABLE IF NOT EXISTS scheduler_logs (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    checked_count INTEGER NOT NULL DEFAULT 0,
+    matched_count INTEGER NOT NULL DEFAULT 0,
+    deduped_count INTEGER NOT NULL DEFAULT 0,
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}'
+  )`,
+  "CREATE INDEX IF NOT EXISTS scheduler_logs_user_started_idx ON scheduler_logs (user_id, started_at)",
   `CREATE TABLE IF NOT EXISTS notification_logs (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -183,7 +198,8 @@ const statements = [
     error TEXT NOT NULL DEFAULT '',
     sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
-  "CREATE UNIQUE INDEX IF NOT EXISTS notification_logs_due_dedupe_idx ON notification_logs (user_id, subscription_id, reminder_rule_id, type, sent_at)",
+  "DROP INDEX IF EXISTS notification_logs_due_dedupe_idx",
+  "CREATE UNIQUE INDEX IF NOT EXISTS notification_logs_due_dedupe_idx ON notification_logs (user_id, subscription_id, reminder_rule_id, channel_id, type, sent_at)",
   `CREATE TABLE IF NOT EXISTS sync_events (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

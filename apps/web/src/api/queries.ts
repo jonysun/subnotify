@@ -92,6 +92,7 @@ export const queries = {
   replaceSubscriptionReminderRules: (subscriptionId: string, rules: Array<Partial<ReminderRule> & { name: string }>) => apiFetch<{ rules: ReminderRule[] }>(`/api/subscriptions/${subscriptionId}/reminders`, { method: "PUT", body: JSON.stringify({ rules }) }),
   notificationChannels: () => apiFetch<NotificationChannel[]>("/api/notification-channels"),
   createNotificationChannel: (body: { type: string; name: string; config: Record<string, unknown> }) => apiFetch<NotificationChannel>("/api/notification-channels", { method: "POST", body: JSON.stringify(body) }),
+  testNotificationChannel: (id: string) => apiFetch<NotificationLog>(`/api/notification-channels/${id}/test`, { method: "POST" }),
   notificationLogs: () => apiFetch<NotificationLog[]>("/api/notification-logs"),
   exchangeRate: (base: string, quote: string) => apiFetch<{ rate: number }>(`/api/exchange-rates?base=${base}&quote=${quote}`),
   adminUsers: () => apiFetch<ApiUser[]>("/api/admin/users"),

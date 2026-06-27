@@ -7,7 +7,7 @@ import { DbService } from "../../db/db.service.js";
 import { notificationChannels, notificationLogs } from "../../db/schema.js";
 import { getNotificationAdapter, type NotificationPayload } from "./channels.js";
 
-const channelTypes = ["smtp", "telegram", "webhook", "bark", "serverchan", "pushplus"] as const;
+const channelTypes = ["smtp", "telegram", "webhook", "wechatbot", "email", "bark", "gotify", "serverchan", "pushplus", "notifyx"] as const;
 const createChannelSchema = z.object({
   type: z.enum(channelTypes),
   name: z.string().trim().min(1).max(120),

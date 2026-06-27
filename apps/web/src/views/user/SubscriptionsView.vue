@@ -27,6 +27,7 @@ type SubscriptionForm = {
   autoRenew: boolean;
   remindersEnabled: boolean;
   initialPaymentPaid: boolean;
+  useGlobalReminders: boolean;
   categoryName: string;
   tagText: string;
   reminderRules: ReminderRuleForm[];
@@ -45,6 +46,7 @@ type ReminderRuleForm = {
 
 const subscriptionsQuery = useQuery({ queryKey: ["subscriptions"], queryFn: queries.subscriptions });
 const paymentsQuery = useQuery({ queryKey: ["payments"], queryFn: queries.payments });
+const channelsQuery = useQuery({ queryKey: ["notification-channels"], queryFn: queries.notificationChannels });
 const { t } = useI18n();
 const today = new Date().toISOString().slice(0, 10);
 const expandedId = ref("");
@@ -91,6 +93,7 @@ function emptyForm(): SubscriptionForm {
     autoRenew: true,
     remindersEnabled: true,
     initialPaymentPaid: false,
+    useGlobalReminders: true,
     categoryName: "",
     tagText: "",
     reminderRules: defaultReminderRules(),
@@ -100,11 +103,11 @@ function emptyForm(): SubscriptionForm {
 
 function defaultReminderRules(): ReminderRuleForm[] {
   return [
-    { name: "到期前 7 天", type: "before_expiry", value: 7, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
-    { name: "到期前 3 天", type: "before_expiry", value: 3, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
-    { name: "到期前 1 天", type: "before_expiry", value: 1, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
-    { name: "到期当天", type: "on_expiry", value: 0, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
-    { name: "到期后每 24 小时", type: "after_expiry", value: 0, unit: "hours", repeatIntervalHours: 24, repeatUntil: "renewed", enabled: false, channelIds: [] }
+    { name: "Before expiry 7 days", type: "before_expiry", value: 7, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "Before expiry 3 days", type: "before_expiry", value: 3, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "Before expiry 1 day", type: "before_expiry", value: 1, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "On expiry day", type: "on_expiry", value: 0, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] },
+    { name: "After expiry every 24 hours", type: "after_expiry", value: 0, unit: "hours", repeatIntervalHours: 24, repeatUntil: "renewed", enabled: false, channelIds: [] }
   ];
 }
 
@@ -132,7 +135,7 @@ function cycleLabel(cycle?: BillingCycle) {
 }
 
 function tagNames(text: string) {
-  return [...new Set(text.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean))];
+  return [...new Set(text.split(/[,]/).map((tag) => tag.trim()).filter(Boolean))];
 }
 
 function openCreate() {
@@ -160,6 +163,7 @@ function openEdit(item: Subscription) {
     autoRenew: item.autoRenew,
     remindersEnabled: item.remindersEnabled,
     initialPaymentPaid: false,
+    useGlobalReminders: true,
     categoryName: item.category?.name ?? "",
     tagText: (item.tags ?? []).map((tag) => tag.name).join(", "),
     reminderRules: [],
@@ -172,6 +176,7 @@ function openEdit(item: Subscription) {
 
 async function loadReminderRules(subscriptionId: string) {
   const result = await queries.subscriptionReminderRules(subscriptionId);
+  form.useGlobalReminders = result.rules.length === 0;
   form.reminderRules = result.rules.length > 0 ? result.rules.map(toReminderForm) : defaultReminderRules();
 }
 
@@ -189,7 +194,7 @@ function toReminderForm(rule: ReminderRule): ReminderRuleForm {
 }
 
 function addReminderRule() {
-  form.reminderRules.push({ name: "到期前 7 天", type: "before_expiry", value: 7, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] });
+  form.reminderRules.push({ name: "Before expiry 7 days", type: "before_expiry", value: 7, unit: "days", repeatIntervalHours: 0, repeatUntil: "renewed", enabled: true, channelIds: [] });
 }
 
 function removeReminderRule(index: number) {
@@ -233,7 +238,7 @@ async function save() {
   } else {
     saved = await queries.createSubscription(payload);
   }
-  await queries.replaceSubscriptionReminderRules(saved.id, form.reminderRules);
+  await queries.replaceSubscriptionReminderRules(saved.id, form.useGlobalReminders ? [] : form.reminderRules);
   modalOpen.value = false;
   await subscriptionsQuery.refetch();
   await paymentsQuery.refetch();
@@ -247,7 +252,7 @@ async function remove(item: Subscription) {
 }
 
 async function renew(item: Subscription) {
-  const amountText = window.prompt("续订金额", String(item.renewalPrice || item.currentPrice));
+  const amountText = window.prompt("Renewal amount", String(item.renewalPrice || item.currentPrice));
   if (amountText === null) return;
   const amount = Number(amountText);
   if (!Number.isFinite(amount) || amount < 0) return;
@@ -256,7 +261,7 @@ async function renew(item: Subscription) {
     amount,
     currency: item.renewalCurrency || item.currentCurrency,
     periods: 1,
-    note: "手动续订"
+    note: "Manual renewal"
   });
   await subscriptionsQuery.refetch();
   await paymentsQuery.refetch();
@@ -332,7 +337,7 @@ const paymentsBySubscription = computed(() => {
       <label><span>{{ t("toDate") }}</span><input v-model="filters.toDate" type="date" /></label>
       <label><span>{{ t("amountMin") }}</span><input v-model="filters.amountMin" min="0" step="0.01" type="number" /></label>
       <label><span>{{ t("amountMax") }}</span><input v-model="filters.amountMax" min="0" step="0.01" type="number" /></label>
-      <label><span>{{ t("sort") }}</span><select v-model="filters.sort"><option value="dueAsc">{{ t("nextDue") }} ↑</option><option value="dueDesc">{{ t("nextDue") }} ↓</option><option value="amountAsc">{{ t("amount") }} ↑</option><option value="amountDesc">{{ t("amount") }} ↓</option><option value="nameAsc">{{ t("name") }} ↑</option><option value="nameDesc">{{ t("name") }} ↓</option></select></label>
+      <label><span>{{ t("sort") }}</span><select v-model="filters.sort"><option value="dueAsc">Due asc</option><option value="dueDesc">Due desc</option><option value="amountAsc">Amount asc</option><option value="amountDesc">Amount desc</option><option value="nameAsc">Name asc</option><option value="nameDesc">Name desc</option></select></label>
       <div class="filter-actions">
         <button class="primary-button compact-button" type="button" @click="applyFilters">{{ t("search") }}</button>
         <button class="small-button" type="button" @click="resetFilters">{{ t("reset") }}</button>
@@ -361,8 +366,8 @@ const paymentsBySubscription = computed(() => {
             <span>{{ t("notes") }}: {{ item.notes || "-" }}</span>
           </div>
           <div class="detail-actions">
-            <button class="small-button" type="button" @click="renew(item)">手动续订</button>
-            <button class="small-button" type="button" @click="toggleStatus(item)">{{ item.status === "active" ? "停用" : "启用" }}</button>
+            <button class="small-button" type="button" @click="renew(item)">Manual renew</button>
+            <button class="small-button" type="button" @click="toggleStatus(item)">{{ item.status === "active" ? "Pause" : "Activate" }}</button>
             <button class="small-button" type="button" @click="openEdit(item)"><Edit3 :size="15" /> <span>{{ t("edit") }}</span></button>
             <button class="small-button danger-button" type="button" @click="remove(item)"><Trash2 :size="15" /> <span>{{ t("delete") }}</span></button>
           </div>
@@ -404,20 +409,21 @@ const paymentsBySubscription = computed(() => {
       <label v-if="!editingId" class="check-row"><input v-model="form.initialPaymentPaid" type="checkbox" /><span>{{ t("firstPeriodPaid") }}</span></label>
       <section class="full-field reminder-editor">
         <div class="section-heading">
-          <h3>提醒规则</h3>
-          <button class="small-button" type="button" @click="addReminderRule">添加规则</button>
+          <h3>Reminder rules</h3>
+          <button class="small-button" type="button" @click="addReminderRule">Add rule</button>
         </div>
+        <label class="check-row"><input v-model="form.useGlobalReminders" type="checkbox" /><span>Use global default reminder rules</span></label>
         <div class="reminder-rule-row reminder-rule-head">
-          <span>启用</span><span>名称</span><span>类型</span><span>数值</span><span>单位</span><span>重复小时</span><span>操作</span>
+          <span>On</span><span>Name</span><span>Type</span><span>Value</span><span>Unit</span><span>Channels</span><span>Action</span>
         </div>
-        <div v-for="(rule, index) in form.reminderRules" :key="index" class="reminder-rule-row">
-          <input v-model="rule.enabled" type="checkbox" />
-          <input v-model="rule.name" />
-          <select v-model="rule.type"><option value="before_expiry">到期前</option><option value="on_expiry">到期当天</option><option value="after_expiry">到期后</option></select>
-          <input v-model.number="rule.value" min="0" type="number" />
-          <select v-model="rule.unit"><option value="days">天</option><option value="hours">小时</option></select>
-          <input v-model.number="rule.repeatIntervalHours" :disabled="rule.type !== 'after_expiry'" min="0" type="number" />
-          <button class="small-button danger-button" type="button" @click="removeReminderRule(index)">删除</button>
+        <div v-for="(rule, index) in form.reminderRules" :key="index" class="reminder-rule-row" :class="{ muted: form.useGlobalReminders }">
+          <input v-model="rule.enabled" :disabled="form.useGlobalReminders" type="checkbox" />
+          <input v-model="rule.name" :disabled="form.useGlobalReminders" />
+          <select v-model="rule.type" :disabled="form.useGlobalReminders"><option value="before_expiry">Before</option><option value="on_expiry">On day</option><option value="after_expiry">After</option></select>
+          <input v-model.number="rule.value" :disabled="form.useGlobalReminders" min="0" type="number" />
+          <select v-model="rule.unit" :disabled="form.useGlobalReminders"><option value="days">Days</option><option value="hours">Hours</option></select>
+          <select v-model="rule.channelIds" :disabled="form.useGlobalReminders" multiple><option v-for="channel in channelsQuery.data.value" :key="channel.id" :value="channel.id">{{ channel.name }} / {{ channel.type }}</option></select>
+          <button class="small-button danger-button" type="button" @click="removeReminderRule(index)">Delete</button>
         </div>
       </section>
       <label class="full-field"><span>{{ t("notes") }}</span><textarea v-model="form.notes" /></label>

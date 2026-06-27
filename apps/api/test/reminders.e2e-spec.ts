@@ -6,7 +6,7 @@ import argon2 from "argon2";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DbService } from "../src/db/db.service.js";
-import { notificationLogs, userSettings, users } from "../src/db/schema.js";
+import { notificationLogs, schedulerLogs, userSettings, users } from "../src/db/schema.js";
 import { createTestApp } from "../src/testing/app.js";
 
 const tempDir = fileURLToPath(new URL("./tmp-reminders", import.meta.url));
@@ -59,12 +59,16 @@ describe("reminders and notifications", () => {
       const { db, token, userId } = await createUserAndToken(app);
       const auth = { Authorization: `Bearer ${token}` };
       const channelPayloads = [
-        { type: "smtp", config: { host: "smtp.local", to: "user@example.com" } },
-        { type: "telegram", config: { botToken: "token", chatId: "chat" } },
-        { type: "webhook", config: { url: "https://example.com/hook" } },
-        { type: "bark", config: { endpoint: "https://example.com/bark" } },
-        { type: "serverchan", config: { sendKey: "key" } },
-        { type: "pushplus", config: { token: "token" } }
+        { type: "smtp", config: { dryRun: true, host: "smtp.local", to: "user@example.com" } },
+        { type: "telegram", config: { dryRun: true, botToken: "token", chatId: "chat" } },
+        { type: "webhook", config: { dryRun: true, url: "https://example.com/hook" } },
+        { type: "wechatbot", config: { dryRun: true, webhook: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test" } },
+        { type: "email", config: { dryRun: true, resendApiKey: "re_test", from: "noreply@example.com", to: "user@example.com" } },
+        { type: "bark", config: { dryRun: true, endpoint: "https://api.day.app/device-key" } },
+        { type: "gotify", config: { dryRun: true, serverUrl: "https://gotify.example.com", appToken: "token" } },
+        { type: "serverchan", config: { dryRun: true, sendKey: "key" } },
+        { type: "pushplus", config: { dryRun: true, token: "token" } },
+        { type: "notifyx", config: { dryRun: true, apiKey: "nx_test" } }
       ] as const;
 
       const channels = [];
@@ -76,14 +80,14 @@ describe("reminders and notifications", () => {
           .expect(201);
         channels.push(response.body);
       }
-      expect(channels.map((channel) => channel.type)).toEqual(["smtp", "telegram", "webhook", "bark", "serverchan", "pushplus"]);
+      expect(channels.map((channel) => channel.type)).toEqual(["smtp", "telegram", "webhook", "wechatbot", "email", "bark", "gotify", "serverchan", "pushplus", "notifyx"]);
 
       await request(app.getHttpServer()).post(`/api/notification-channels/${channels[0].id}/test`).set(auth).expect(201);
 
       const rule = await request(app.getHttpServer())
         .post("/api/reminder-rules")
         .set(auth)
-        .send({ name: "Three days", daysBefore: 3, channelIds: [channels[0].id] })
+        .send({ name: "Three days", daysBefore: 3, channelIds: [channels[0].id, channels[1].id] })
         .expect(201);
       expect(rule.body).toMatchObject({ name: "Three days", daysBefore: 3, enabled: true });
 
@@ -106,7 +110,7 @@ describe("reminders and notifications", () => {
         .set(auth)
         .send({ now: "2026-02-01T00:00:00.000Z" })
         .expect(201);
-      expect(firstRun.body).toMatchObject({ scanned: 1, logged: 1 });
+      expect(firstRun.body).toMatchObject({ scanned: 1, matched: 1, sent: 2, logged: 2 });
 
       const secondRun = await request(app.getHttpServer())
         .post("/api/reminders/run")
@@ -117,7 +121,8 @@ describe("reminders and notifications", () => {
 
       const logs = (await db.select().from(notificationLogs)).filter((log) => log.userId === userId);
       expect(logs.filter((log) => log.type === "test_delivery")).toHaveLength(1);
-      expect(logs.filter((log) => log.type === "subscription_reminder")).toHaveLength(1);
+      expect(logs.filter((log) => log.type === "subscription_reminder")).toHaveLength(2);
+      expect(logs.filter((log) => log.type === "subscription_reminder").map((log) => log.status)).toEqual(["sent", "sent"]);
     } finally {
       await app.close();
     }
@@ -181,6 +186,52 @@ describe("reminders and notifications", () => {
 
       const logs = (await db.select().from(notificationLogs)).filter((log) => log.userId === userId && log.subscriptionId === subscription.body.id);
       expect(logs).toHaveLength(2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("records scheduler scan summaries for due reminder runs", async () => {
+    const app = await createTestApp();
+    try {
+      const { db, token, userId } = await createUserAndToken(app);
+      const auth = { Authorization: `Bearer ${token}` };
+      const channel = await request(app.getHttpServer())
+        .post("/api/notification-channels")
+        .set(auth)
+        .send({ type: "webhook", name: "Webhook", config: { dryRun: true, url: "https://example.com/hook" } })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post("/api/reminder-rules")
+        .set(auth)
+        .send({ name: "Global one day", daysBefore: 1, channelIds: [channel.body.id] })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post("/api/subscriptions")
+        .set(auth)
+        .send({
+          name: "Global Rule Service",
+          currentCycle: "monthly",
+          currentPrice: 20,
+          currentCurrency: "CNY",
+          startDate: "2026-01-01T00:00:00.000Z",
+          nextDueDate: "2026-02-02T00:00:00.000Z",
+          remindersEnabled: true
+        })
+        .expect(201);
+
+      const run = await request(app.getHttpServer())
+        .post("/api/reminders/run")
+        .set(auth)
+        .send({ now: "2026-02-01T00:00:00.000Z" })
+        .expect(201);
+      expect(run.body).toMatchObject({ scanned: 1, matched: 1, sent: 1, logged: 1 });
+
+      const logs = (await db.select().from(schedulerLogs)).filter((log) => log.userId === userId);
+      expect(logs).toHaveLength(1);
+      expect(logs[0]).toMatchObject({ userId, checkedCount: 1, matchedCount: 1, sentCount: 1, status: "ok" });
     } finally {
       await app.close();
     }

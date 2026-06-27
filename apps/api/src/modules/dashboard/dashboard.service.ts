@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, isNull } from "drizzle-orm";
 import type { AuthUser } from "../../common/decorators/current-user.decorator.js";
 import { DbService } from "../../db/db.service.js";
-import { categories, payments, subscriptions } from "../../db/schema.js";
+import { categories, payments, schedulerLogs, subscriptions } from "../../db/schema.js";
 
 type PaymentRow = typeof payments.$inferSelect;
 type SubscriptionRow = typeof subscriptions.$inferSelect;
@@ -20,11 +20,14 @@ export class DashboardService {
     const recentStart = this.addDays(now, -7);
     const soonEnd = this.addDays(now, 7);
 
-    const [subscriptionRows, paymentRows, categoryRows] = await Promise.all([
+    const [subscriptionRows, paymentRows, categoryRows, schedulerRows] = await Promise.all([
       this.db.db.select().from(subscriptions).where(and(eq(subscriptions.userId, user.id), isNull(subscriptions.deletedAt))),
       this.db.db.select().from(payments).where(and(eq(payments.userId, user.id), isNull(payments.deletedAt))),
-      this.db.db.select().from(categories).where(and(eq(categories.userId, user.id), isNull(categories.deletedAt)))
+      this.db.db.select().from(categories).where(and(eq(categories.userId, user.id), isNull(categories.deletedAt))),
+      this.db.db.select().from(schedulerLogs).where(eq(schedulerLogs.userId, user.id))
     ]);
+    const schedulerStatusHistory = schedulerRows.sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 10);
+    const latestScheduler = schedulerStatusHistory[0];
 
     const subscriptionById = new Map(subscriptionRows.map((subscription) => [subscription.id, subscription]));
     const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
@@ -51,8 +54,20 @@ export class DashboardService {
         .map((subscription) => this.renewalSummary(subscription, now)),
       expenseByCategory: this.expenseByCategory(paymentsThisYear, subscriptionById, categoryById),
       expenseByType: this.expenseByType(paymentsThisYear, subscriptionById),
-      schedulerStatus: null,
-      schedulerStatusHistory: []
+      schedulerStatus: latestScheduler
+        ? {
+            lastRunAt: latestScheduler.startedAt,
+            checkedSubscriptions: latestScheduler.checkedCount,
+            expiringMatched: latestScheduler.matchedCount,
+            dedupedCount: latestScheduler.dedupedCount,
+            sentCount: latestScheduler.sentCount,
+            failedCount: latestScheduler.failedCount,
+            status: latestScheduler.status,
+            reason: latestScheduler.reason,
+            extra: latestScheduler.metadata
+          }
+        : null,
+      schedulerStatusHistory
     };
   }
 

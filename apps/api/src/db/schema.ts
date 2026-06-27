@@ -220,7 +220,7 @@ export const notificationChannels = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["smtp", "telegram", "webhook", "bark", "serverchan", "pushplus"] }).notNull(),
+    type: text("type", { enum: ["smtp", "telegram", "webhook", "wechatbot", "email", "bark", "gotify", "serverchan", "pushplus", "notifyx"] }).notNull(),
     name: text("name").notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     config: text("config", { mode: "json" }).$type<Record<string, unknown>>().notNull().default(sql`'{}'`),
@@ -229,6 +229,27 @@ export const notificationChannels = sqliteTable(
   },
   (table) => ({
     userIdx: index("notification_channels_user_idx").on(table.userId)
+  })
+);
+
+export const schedulerLogs = sqliteTable(
+  "scheduler_logs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at").notNull(),
+    checkedCount: integer("checked_count").notNull().default(0),
+    matchedCount: integer("matched_count").notNull().default(0),
+    dedupedCount: integer("deduped_count").notNull().default(0),
+    sentCount: integer("sent_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    status: text("status").notNull(),
+    reason: text("reason").notNull().default(""),
+    metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>().notNull().default(sql`'{}'`)
+  },
+  (table) => ({
+    userStartedIdx: index("scheduler_logs_user_started_idx").on(table.userId, table.startedAt)
   })
 );
 
@@ -249,7 +270,7 @@ export const notificationLogs = sqliteTable(
     sentAt: text("sent_at").notNull().default(sql`CURRENT_TIMESTAMP`)
   },
   (table) => ({
-    dueDedupeIdx: uniqueIndex("notification_logs_due_dedupe_idx").on(table.userId, table.subscriptionId, table.reminderRuleId, table.type, table.sentAt)
+    dueDedupeIdx: uniqueIndex("notification_logs_due_dedupe_idx").on(table.userId, table.subscriptionId, table.reminderRuleId, table.channelId, table.type, table.sentAt)
   })
 );
 
